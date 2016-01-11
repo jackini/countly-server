@@ -97,6 +97,10 @@ if (cluster.isMaster) {
 
     var os_mapping = {
         "unknown":"unk",
+        "undefined":"unk",
+        "tvos":"atv",
+        "watchos":"wos",
+        "unity editor":"uty",
         "qnx":"qnx",
         "os/2":"os2",
         "windows":"mw",

@@ -29,13 +29,14 @@
 	segments["[CLY]_push_action"]={i:"123456789012345678901234"};
 	segments["[CLY]_push_sent"]={i:"123456789012345678901234"};
 	segments["[CLY]_view"]={
-        name:["/", "/blog", "/contact", "/search", "/about", "prices"],
+        name:["Settings Page", "Purchase Page", "Credit Card Entry", "Profile page", "Start page", "Message page"],
         visit:[1],
         start:[0,1],
         exit:[0,1],
         bounce:[0,1]
     };
 	var crashProps = ["root", "ram_current", "ram_total", "disk_current", "disk_total", "bat_current", "bat_total", "orientation", "stack", "log", "custom", "features", "settings", "comment", "os", "os_version", "manufacture", "device", "resolution", "app_version"];
+    var ip_address = [];
 	function getRandomInt(min, max) {
 		return Math.floor(Math.random() * (max - min + 1)) + min;
 	}
@@ -110,7 +111,11 @@
 		}
 
 		this.hasSession = false;
-		this.ip = chance.ip();
+        if(ip_address.length > 0 && Math.random() >= 0.5){
+            this.ip = ip_address.pop();
+        }
+        else
+            this.ip = chance.ip();
 		this.userdetails = {name: chance.name(), username: chance.twitter().substring(1), email:chance.email(), organization:capitaliseFirstLetter(chance.word()), phone:chance.phone(), gender:chance.gender().charAt(0), byear:chance.birthday().getFullYear(), custom:createRandomObj(6)};
 		this.metrics = {};
 		this.startTs = startTs;
@@ -217,7 +222,10 @@
 			}
 			var event = {
 				"key": id,
-				"count": 1
+				"count": 1,
+                "timestamp": this.ts,
+                "hour": getRandomInt(0, 23),
+                "dow": getRandomInt(0, 6)
 			};
 			if(id == this.iap){
 				stats.b++;
@@ -246,11 +254,19 @@
 		
 		this.getPushEvent = function(id){
 			if(!id){
-				id = pushEvents[Math.floor(Math.random()*pushEvents.length)];
+                if(Math.random() >= 0.4)
+                    id = "[CLY]_push_sent";
+                else if(Math.random() >= 0.4)
+                    id = "[CLY]_push_open";
+                else
+                    id = "[CLY]_push_action";
 			}
 			var event = {
 				"key": id,
 				"count": 1,
+                "timestamp": this.ts,
+                "hour": getRandomInt(0, 23),
+                "dow": getRandomInt(0, 6),
                 "test": 1 // Events starting with [CLY]_ are ignored by the API (internal events). This flag is to bypass that.
 			};
 			if(segments[id]){
@@ -265,7 +281,7 @@
 		};
 		
 		this.startSession = function(){
-			this.ts = getRandomInt(this.startTs, this.endTs);
+			this.ts = this.ts+60*60*24+100;
 			stats.s++;
 			if(!this.isRegistered){
 				this.isRegistered = true;
@@ -283,6 +299,7 @@
 				stats.e++;
 				this.request({timestamp:this.ts, begin_session:1, events:this.getEvent("Login")});
 			}
+            this.request({timestamp:this.ts, events:this.getEvent("[CLY]_view")});
 			this.hasSession = true;
 			this.timer = setTimeout(function(){that.extendSession()}, timeout);
 		};
@@ -298,7 +315,7 @@
 				if(this.hasPush){
 					this.request({timestamp:this.ts, events:this.getPushEvent()});
 				}
-				if(Math.random() > 0.5){
+				if(Math.random() > 0.8){
 					this.timer = setTimeout(function(){that.extendSession()}, timeout);
 				}
 				else{
@@ -327,6 +344,8 @@
 			stats.r++;
 			params.device_id = this.id;
 			params.ip_address = this.ip;
+            params.hour = getRandomInt(0, 23);
+            params.dow = getRandomInt(0, 6);
 			bulk.push(params);
 			countlyPopulator.sync();
 		};
@@ -350,6 +369,113 @@
 			$("#populate-stats-"+i).text(totalStats[i]);
 		}
 	}
+    
+    function createCampaign(id, name, cost, type, callback){
+        $.ajax({
+			type:"GET",
+			url:countlyCommon.API_URL + "/i/campaign/create",
+			data:{
+				api_key:countlyGlobal["member"].api_key,
+				args:JSON.stringify({
+                    "_id":id+countlyCommon.ACTIVE_APP_ID,
+                    "name":name,
+                    "link":"http://count.ly",
+                    "cost":cost,
+                    "costtype":type,
+                    "fingerprint":false,
+                    "links":{},
+                    "postbacks":[],
+                    "app_id":countlyCommon.ACTIVE_APP_ID})
+			},
+			success:callback,
+            error:callback
+		});
+    }
+    
+    function clickCampaign(name){
+        var ip = chance.ip();
+        if(ip_address.length && Math.random() > 0.5){
+            ip = ip_address[Math.floor(Math.random()*ip_address.length)];
+        }
+        else{
+            ip_address.push(ip);
+        }
+        $.ajax({
+			type:"GET",
+			url:countlyCommon.API_URL + "/i/campaign/click/"+name+countlyCommon.ACTIVE_APP_ID,
+            data:{ip_address:ip, test:true, timestamp:getRandomInt(startTs, endTs)}
+		});
+    }
+    
+    function genereateCampaigns(callback){
+        var campaigns = ["social", "ads", "landing"];
+        createCampaign("social", "Social Campaign", "0.5", "click", function(){
+            createCampaign("ads", "Ads Campaign", "1", "install", function(){
+                createCampaign("landing", "Landing page", "30", "campaign", function(){
+                    for(var i = 0; i < 200; i++){
+                        setTimeout(function(){
+                            clickCampaign(campaigns[getRandomInt(0, campaigns.length-1)]);
+                        },1);
+                    }
+                    setTimeout(callback, 3000);
+                });
+            });
+        });
+    }
+    
+    function generateRetentionUser(ts, users, ids, callback){
+        var bulk = [];
+        for(var i = 0; i < users; i++){
+            for(var j = 0; j < ids.length; j++){
+                bulk.push({ip_address:chance.ip(), device_id:i+""+ids[j], begin_session:1, timestamp:ts});
+            }
+        }
+        $.ajax({
+            type:"GET",
+            url:countlyCommon.API_URL + "/i/bulk",
+            data:{
+				app_key:countlyCommon.ACTIVE_APP_KEY,
+				requests:JSON.stringify(bulk)
+			},
+            success:callback,
+            error:callback
+        });
+    }
+    
+    function generateRetention(callback){
+        var ts = endTs - 60*60*24*9;
+        var ids = [ts];
+        var users = 10;
+        generateRetentionUser(ts, users--, ids, function(){
+            ts += 60*60*24;
+            ids.push(ts);
+            generateRetentionUser(ts, users--, ids, function(){
+                ts += 60*60*24;
+                ids.push(ts);
+                generateRetentionUser(ts, users--, ids, function(){
+                    ts += 60*60*24;
+                    ids.push(ts);
+                    generateRetentionUser(ts, users--, ids, function(){
+                        ts += 60*60*24;
+                        ids.push(ts);
+                        generateRetentionUser(ts, users--, ids, function(){
+                            ts += 60*60*24;
+                            ids.push(ts);
+                            generateRetentionUser(ts, users--, ids, function(){
+                                ts += 60*60*24;
+                                ids.push(ts);
+                                generateRetentionUser(ts, users--, ids, function(){
+                                    ts += 60*60*24;
+                                    ids.push(ts);
+                                    generateRetentionUser(ts, users--, ids, callback);
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    }
 	
 	//Public Methods
 	countlyPopulator.setStartTime = function(time){
@@ -395,9 +521,6 @@
 				},Math.random()*timeout);
 			}
 		}
-		for(var i = 0; i < amount; i++){
-			createUser();
-		}
 		function processUsers(){
 			for(var i = 0; i < amount; i++){
 				processUser(users[i]);
@@ -407,8 +530,22 @@
 			else
 				countlyPopulator.sync(true);
 		}
-		
-		setTimeout(processUsers, timeout);
+        generateRetention(function(){
+            if(typeof countlyAttribution != "undefined"){
+                genereateCampaigns(function(){
+                    for(var i = 0; i < amount; i++){
+                        createUser();
+                    }
+                    setTimeout(processUsers, timeout);
+                });
+            }
+            else{
+                for(var i = 0; i < amount; i++){
+                    createUser();
+                }
+                setTimeout(processUsers, timeout);
+            }
+        });
 	};
 	
 	countlyPopulator.stopGenerating = function () {
