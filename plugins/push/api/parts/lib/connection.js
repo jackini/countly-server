@@ -3,20 +3,21 @@
 var util = require('util'),
 	EventEmitter = require('events').EventEmitter,
 	M = require('./message.js'),
+	Err = require('./error.js'),
 	prof = require('./profiler.js'),
 	constants = require('./constants'),
 	SP = constants.SP,
 	DEFAULTS = constants.OPTIONS,
-	debug = constants.debug('connection'),
+	log = require('../../../../../api/utils/log.js')('push:connection'),
 	platforms = {};
 
-platforms[M.Platform.APNS] = require('./apns.js');
+platforms[M.Platform.APNS] = require('./apn.js');
 platforms[M.Platform.GCM] = require('./gcm.js');
 // platforms[M.Platform.GCM] = require('./test.js');
 
 
 var Connection = function(cluster, idx, credentials, profiler) {
-	debug('[%j|%j]: New connection', idx, credentials.id);
+	log.d('[%j|%j]: New connection', idx, credentials.id);
 	this.idx = idx;
 	this.inflow = new prof.RateSmoother(DEFAULTS.ratesSmoothingPeriod);
 	this.drain = new prof.RateSmoother(DEFAULTS.ratesSmoothingPeriod);
@@ -27,7 +28,7 @@ var Connection = function(cluster, idx, credentials, profiler) {
 	// this.inflow.tick = this.inflow.mark;
 	// this.drain.tick = this.drain.mark;
 
-	this.connection = new platforms[credentials.platform](credentials, profiler);
+	this.connection = new platforms[credentials.platform](credentials, cluster.loop, idx);
 
 	// Notification is sent (one or more tokens)
 	this.connection.on(SP.MESSAGE, function(messageId, size){
@@ -40,28 +41,35 @@ var Connection = function(cluster, idx, credentials, profiler) {
 		cluster.emit(SP.MESSAGE, this, messageId, size);
 	}.bind(this));
 
-	this.connection.on(SP.ERROR, function(){
+	this.connection.on(SP.ERROR, function(error){
+		log.d('Connection error %j', arguments);
 		this.lastEvent = Date.now();
+		cluster.emit(SP.ERROR, this, error);
 
-		var args = [].slice.call(arguments);
-		args.unshift(this);
-		args.unshift(SP.ERROR);
-		cluster.emit.apply(cluster, args);
+		if (error.code & Err.IS_NON_RECOVERABLE) {
+			log.d('Non-recoverable error at connection level, closing %j', this.idx);
+			cluster.closeConnection(this.idx);
+		}
 	}.bind(this));
 
 	this.connection.on(SP.CLOSED, function(){
 		this.lastEvent = Date.now();
-		debug('Connection says it\'s closed');
+		log.d('Connection says it\'s closed');
 
 		var i = cluster.connections.indexOf(this);
 		if (i !== -1) {
-			debug('Removing connection at index %j', i);
+			log.d('Removing connection at index %j', i);
 			cluster.connections.splice(i, 1);
 		}
 
 		if (cluster.connections.length === 0) {
-			debug('No connections anymore, cluster closed');
-			cluster.emit(SP.CLOSED, cluster);
+			log.d('No connections in cluster, will close it in %dms if no connections added', 2 * DEFAULTS.eventTTL);
+			setTimeout(function(){
+				if (cluster.connections.length === 0) {
+					log.d('No connections anymore, cluster closed');
+					cluster.emit(SP.CLOSED, cluster);
+				}
+			}, 2 * DEFAULTS.eventTTL);
 		}
 	}.bind(this));
 };
@@ -74,12 +82,15 @@ Connection.prototype.send = function(messageId, content, encoding, expiry, devic
 };
 
 Connection.prototype.add = function(notification){
-	this.connection.add(notification);
+	this.inflow.tick();
+	this.counter.inc(1);
+	this.connection.notifications.push(notification);
 };
 
 Connection.prototype.close = function(clb){
+	log.d('closing connection');
 	this.closed = true;
-	this.connection.close(clb);
+	return this.connection.close(clb);
 };
 
 Connection.prototype.abort = function(msg){
@@ -90,6 +101,7 @@ var Cluster = function(credentials, profiler) {
 	this.idx = 0;
 	this.clusterInflow = new prof.RateSmoother(DEFAULTS.ratesSmoothingPeriod);
 	this.clusterDrain = new prof.RateSmoother(DEFAULTS.ratesSmoothingPeriod);
+	this.loop = new prof.ValueSmoother(0.1);
 	this.profiler = profiler;
 	this.queue = [];
 	// this.clusterInflow = stats.meter('clusterInflow');
@@ -98,26 +110,29 @@ var Cluster = function(credentials, profiler) {
 	// this.clusterDrain.tick = this.clusterDrain.mark;
 	// this.clusterJson = stats.toJSON();
 	this.credentials = credentials;
+	this.connectionOptions = DEFAULTS[credentials.platform === M.Platform.APNS ? 'apn' : credentials.platform === M.Platform.GCM ? 'gcm' : undefined];
 	this.connections = [];
 	this.connectionsClosing = 0;
-	debug('[0|%j]: New cluster', credentials.id);
+	log.d('[0|%j]: New cluster', credentials.id);
 };
 util.inherits(Cluster, EventEmitter);
 
 Cluster.prototype.close = function(){
 	if (!this.queue.length) {
 		if (!this.closing) {
-			debug('Going to close the cluster on timeout after %dms', DEFAULTS.connectionTTL);
+			log.d('Going to close the cluster on timeout after %dms', 2 * DEFAULTS.eventTTL);
 			this.closing = setTimeout(function(){
 				if (!this.queue.length) {
-					debug('Cluster is closing on timeout');
+					log.d('Cluster is closing on timeout');
 					this.closed = true;
 					this.emit(SP.CLOSED, this);
 				}
-			}.bind(this), DEFAULTS.connectionTTL);
+			}.bind(this), 2 * DEFAULTS.eventTTL);
+			this.profiler.close();
 		}
 	} else if (this.closing) {
 		clearTimeout(this.closing);
+		this.closing = undefined;
 	}
 };
 
@@ -140,14 +155,17 @@ Cluster.prototype.shouldGrow = function(){
 
 Cluster.prototype.shouldShrink = function(){
 	// return this.clusterJson.clusterInflow.currentRate / this.clusterJson.clusterDrain.currentRate < 0.5;
-	return this.clusterInflow.secondsFromLastValue() > DEFAULTS.connectionTTL / 3 ||
+	return this.clusterInflow.secondsFromLastValue() > DEFAULTS.eventTTL / 3 ||
 		   this.clusterInflow.value / this.clusterDrain.value < 0.5;
 };
 
 Cluster.prototype.grow = function(){
-	debug('[0|%j] Growing pool to %j connections', this.credentials.id, this.connections.length + 1);
+	log.d('[0|%j] Growing pool to %j connections', this.credentials.id, this.connections.length + 1);
 	this.connections.push(new Connection(this, this.idx++, this.credentials, this.profiler));
 	this.connectionsLastChanged = Date.now();
+	if (this.profiler.closed) {
+		this.profiler.open();
+	}
 	return this.connections[this.connections.length - 1];
 };
 
@@ -191,7 +209,7 @@ Cluster.prototype.countAllConnections = function() {
 
 Cluster.prototype.service = function() {
 	this.nextTickService = false;
-	if (this.queue.length === 0 && this.connections.length === 0) { 
+	if (this.queue.length === 0 && this.connections.length === 0 && this.countAllConnections() <= 0) { 
 		this.stopMonitor();
 		return; 
 	} else {
@@ -206,23 +224,23 @@ Cluster.prototype.service = function() {
 		this.measuring = this.measuring || this.clusterDrain.measure(DEFAULTS.ratesConnectionPoolCooldown * 2, function(oldRate){
 			var rate = this.clusterInflow.value / this.clusterDrain.value,
 				tota = this.connections.length - this.connectionsClosing,
-				diff = Math.min(Math.round(rate * tota), DEFAULTS.connectionsPerCredentials) - tota,
+				diff = Math.min(Math.round(rate * tota), this.connectionOptions.connectionsPerCredentials) - tota,
 				left = this.countAllConnections() / oldRate,
 				difc = diff, diffMax;
 
-			debug('------------ Measured rate %d, pool size is %d, rate is %j, left %j seconds (CPU %j, memory %j, process memory %j)', oldRate, tota, rate, left, this.profiler.cpu.value.toFixed(2), this.profiler.memory.value.toFixed(2), process.memoryUsage());
+			log.d('------------ Measured rate %d, pool size is %d, rate is %j, left %j seconds (CPU %j, memory %j, process memory %j)', oldRate, tota, rate, left, this.profiler.cpu.value.toFixed(2), this.profiler.memory.value.toFixed(2), process.memoryUsage());
 
 			if (oldRate > 1 && left > DEFAULTS.ratesToLeftSeconds) {
-				debug('------------ Old measured diff is %j', diff);
+				log.d('------------ Old measured diff is %j', diff);
 				diff = Math.min(
 					Math.round((rate * (1 - DEFAULTS.ratesToLeftWeight) + left / DEFAULTS.ratesToLeftSeconds * DEFAULTS.ratesToLeftWeight)) * tota - tota, 
-					DEFAULTS.connectionsPerCredentials
+					this.connectionOptions.connectionsPerCredentials
 				);
-				debug('------------ New measured diff is %j', diff);
+				log.d('------------ New measured diff is %j', diff);
 			}
 
  			if (oldRate > 1 && tota + diff > 0) {
-				debug('------------ Measured rate %d before changing pool size from %d to %d (CPU %j, memory %j)', oldRate, tota, tota + diff, this.profiler.cpu.value.toFixed(2), this.profiler.memory.value.toFixed(2));
+				log.d('------------ Measured rate %d before changing pool size from %d to %d (CPU %j, memory %j)', oldRate, tota, tota + diff, this.profiler.cpu.value.toFixed(2), this.profiler.memory.value.toFixed(2));
 	
 				if (diff > 0) {
 					diffMax = Math.min(difc, DEFAULTS.maxImmediatePoolChange);
@@ -236,12 +254,12 @@ Cluster.prototype.service = function() {
 					tota = this.connections.length - this.connectionsClosing;
 					this.measuring = false;
 
-					debug('------------ Measured rate %d after changing pool size to %d', newRate, tota);
+					log.d('------------ Measured rate %d after changing pool size to %d', newRate, tota);
 
 					var rateRate = newRate / oldRate,
-						rateDiff = Math.min(Math.round(rateRate * tota), DEFAULTS.connectionsPerCredentials) - tota;
+						rateDiff = Math.min(Math.round(rateRate * tota), this.connectionOptions.connectionsPerCredentials) - tota;
 
-					debug('------------ Rate diff is %d', rateDiff);
+					log.d('------------ Rate diff is %d', rateDiff);
 
 					if (rateDiff > 0 && this.queue.length) {
 						diffMax = Math.min(rateDiff, DEFAULTS.maxImmediatePoolChange);
@@ -258,7 +276,7 @@ Cluster.prototype.service = function() {
 
 		}.bind(this));
 	} else {
-		debug('Cannot change pool: %j / %j, %j / %j', this.queue.length > 0, this.countAllConnections(), this.connectionsLastChanged, Date.now());
+		log.d('Cannot change pool: %j / %j, %j / %j', this.queue.length > 0, this.countAllConnections(), this.connectionsLastChanged, Date.now());
 	}
 
 	for (var i = this.connections.length - 1; i >= 0; i--) {
@@ -267,6 +285,7 @@ Cluster.prototype.service = function() {
 			while (batch-- && this.queue.length) {
 				var msg = this.queue.shift();
 				if (c.send.apply(c, msg) === -1) {
+					log.d('Connection %d doesn\'t accept messages, closing', c.idx);
 					this.queue.push(msg);
 					this.closeConnection(i);
 					this.serviceImmediate();
@@ -276,6 +295,7 @@ Cluster.prototype.service = function() {
 		}
 
 		if (c.counter.count === 0) {
+			log.d('Connection [%j:%j] is empty, closing with notes in flight %d', c.idx, this.credentials.id, c.connection.notesInFlight);
 			this.closeConnection(i);
 		}
 	}
@@ -292,7 +312,7 @@ Cluster.prototype.closeConnection = function(idx){
 	var index;
 	if (typeof idx === 'number' && idx < this.connections.length) {
 		index = idx;
-		debug('[0|%j] Shrinking pool idx %d', this.credentials.id, idx);
+		log.d('[0|%j] Shrinking pool idx %d', this.credentials.id, idx);
 	} else if (idx instanceof Connection) {
 		index = this.connections.indexOf(idx);
 		if (idx === -1) {
@@ -301,15 +321,14 @@ Cluster.prototype.closeConnection = function(idx){
 	} else {
 		var min = this.leastLoadedConnectionIndex();
 		if (min !== -1) { index = min; }
-		debug('[0|%j] Shrinking pool using least loaded %d', this.credentials.id, index);
+		log.d('[0|%j] Shrinking pool using least loaded %d', this.credentials.id, index);
 	}
 
 	if (index !== -1 && typeof index !== 'undefined') {
-		debug('[0|%j] Shrinking pool to %j connections (closing %d)', this.credentials.id, this.connections.length - 1, index);
+		log.d('[0|%j] Shrinking pool to %j connections (closing %d)', this.credentials.id, this.connections.length - 1, index);
 		var connection = this.connections[index];
-		this.connectionsClosing++;
-		connection.close(function(notes){
-			debug('[0|%j] Shrinked pool to %j connections (%d notes left), removing connection', this.credentials.id, this.connections.length - 1, notes ? notes.length : 0);
+		var closing = connection.close(function(notes){
+			log.d('[0|%j] Shrinked pool to %j connections (%d notes left), removing connection', this.credentials.id, this.connections.length - 1, notes ? notes.length : 0);
 			var i = this.connections.indexOf(connection), j;
 			if (i !== -1) {
 				this.connections.splice(i, 1);
@@ -319,13 +338,13 @@ Cluster.prototype.closeConnection = function(idx){
 
 			if (notes && notes.length) {
 				if (this.closed) {
-					debug('[0|%j] Loosing %d notifications because cluster is closed', this.credentials.id, notes.length);
+					log.d('[0|%j] Loosing %d notifications because cluster is closed', this.credentials.id, notes.length);
 					return;
 				}
 
 				for (i = 0; i < this.connections.length; i++) {
 					if (!this.connections[i].closed) {
-						debug('[0|%j] %d notifications will be moved into connection %d', this.credentials.id, notes.length, i);
+						log.d('[0|%j] %d notifications will be moved into connection %d', this.credentials.id, notes.length, i);
 						for (j = notes.length - 1; j >= 0; j--) {
 						 	this.connections[i].add(notes[j]);
 						}
@@ -333,13 +352,17 @@ Cluster.prototype.closeConnection = function(idx){
 					}
 				}
 
-				debug('[0|%j] Growing back by 1 because %d notifications need to be placed somewhere', this.credentials.id, notes.length);
+				log.d('[0|%j] Growing back by 1 because %d notifications need to be placed somewhere', this.credentials.id, notes.length);
 				var newConnection = this.grow();
 				for (j = notes.length - 1; j >= 0; j--) {
-				 	newConnection.add(notes[j]);
+					newConnection.add(notes[j]);
 				}
 			}
 		}.bind(this));
+
+		if (closing) {
+			this.connectionsClosing++;
+		}
 
 		this.connectionsLastChanged = Date.now();
 	}
@@ -392,25 +415,54 @@ Cluster.prototype.startMonitor = function(seconds) {
 				c.inflow.tick(0);
 			}
 			if (this.queue.length === 0 && c.counter.count === 0 && !c.closed) {
-				debug('[%j:%j] Closing connection from monitor', c.idx, this.credentials.id);
+				log.d('[%j:%j] Closing connection from monitor', c.idx, this.credentials.id);
 				this.closeConnection(c);
-			} else if (c.lastEvent < (Date.now() - 10000)) {
-				debug('[%j:%j] Closing connection from monitor because it appeared to be stuck', c.idx, this.credentials.id);
+			} else if (c.lastEvent < (Date.now() - 20000)) {
+				log.d('[%j:%j] Closing connection from monitor because it appeared to be stuck', c.idx, this.credentials.id);
 				this.closeConnection(c);
+			} else if (c.connection.throttledDown && this.loop.value < c.connection.options.eventLoopDelayToThrottleDown) {
+				log.d('[loop]: Resurrecting connection from monitor %d (%d < %d)', c.idx);
+				c.connection.throttledDown = false;
+				c.connection.serviceImmediate();
 			}
-			debug('[%j:%j] left %d \t inflow %j (%d) ||| drain %j (%d)', c.idx, this.credentials.id, c.counter.count, c.inflow.value.toFixed(2), c.inflow.sum, c.drain.value.toFixed(2), c.drain.sum);
+			log.d('[%j:%j] left %d \t inflow %j (%d) ||| drain %j (%d)', c.idx, this.credentials.id, c.counter.count, c.inflow.value.toFixed(2), c.inflow.sum, c.drain.value.toFixed(2), c.drain.sum);
 		}
-		if (this.queue.length === 0) {
+		if (this.queue.length === 0 && this.countAllConnections() === 0) {
+			log.d('No more messages in queue & connections, closing cluster after timeout');
 			this.close();
 		}
 		this.lastMonitored = Date.now();
-		debug('[cluster]: inflow %j / drain %j, %j in queue, %j in connections', this.clusterInflow.value.toFixed(2), this.clusterDrain.value.toFixed(2), this.queue.length, this.countAllConnections());
-		debug('[system]: CPU %j / memory %j', this.profiler.cpu.value.toFixed(2), this.profiler.memory.value.toFixed(2));
+		log.d('[cluster]: inflow %j / drain %j, %j in queue, %j in connections', this.clusterInflow.value.toFixed(2), this.clusterDrain.value.toFixed(2), this.queue.length, this.countAllConnections());
+		log.d('[system]: CPU %j / memory %j', this.profiler.cpu.value.toFixed(2), this.profiler.memory.value.toFixed(2));
 
 		var now = Date.now();
 		setImmediate(function(){
-			debug('[loop]: %j', Date.now() - now);
-		}); 
+			var delay = Date.now() - now, i, c;
+			this.loop.push(delay);
+			log.d('[loop]: %j, %j', delay, Math.round(this.loop.value));
+
+			for (i = this.connections.length - 1; i >= 0; i--) {
+				c = this.connections[i];
+				if (c.connection.throttledDown && this.loop.value < c.connection.options.eventLoopDelayToThrottleDown) {
+					log.d('[loop]: Resurrecting connection %d', c.idx);
+					c.connection.throttledDown = false;
+					c.connection.serviceImmediate();
+				} else if (c.connection.options.transmitAtOnceAdjusts && (!c.connection.nextTransmitAtOnceAdjust || c.connection.nextTransmitAtOnceAdjust < Date.now())) {
+					
+					if (!c.connection.throttledDown && this.loop.value < 0.9 * c.connection.options.eventLoopDelayToThrottleDown && this.canGrow()) {
+						// send more messages at once, loop is underloaded
+						c.connection.nextTransmitAtOnceAdjust = Date.now() + 10 * 1000;	// full loop smothing period 
+						c.connection.currentTransmitAtOnce = Math.floor(Math.min(c.connection.currentTransmitAtOnce * 1.1, c.connection.options.transmitAtOnceMaxAdjusted));
+						log.d('[loop]: +++ increasing batch size of %d to %d', c.idx, c.connection.currentTransmitAtOnce);
+					} else if (this.loop.value > 0.9 * c.connection.options.eventLoopDelayToThrottleDown) {
+						// send less messages at once, loop is overloaded
+						c.connection.nextTransmitAtOnceAdjust = Date.now() + 10 * 1000;	// full loop smothing period 
+						c.connection.currentTransmitAtOnce = Math.max(Math.floor(c.connection.currentTransmitAtOnce * 0.9), 1);
+						log.d('[loop]: --- decreasing batch size of %d to %d', c.idx, c.connection.currentTransmitAtOnce);
+					}
+				}
+			}
+		}.bind(this)); 
 
 		if (!this.closed) {
 			if (this.monitoring) { 
@@ -429,6 +481,6 @@ Cluster.prototype.startMonitor = function(seconds) {
 module.exports = Cluster;
 
 module.exports.clearFromCredentials = function(key) {
-	debug('clearFromCredentials %j', key);
+	log.d('clearFromCredentials %j', key);
 	platforms[M.Platform.APNS].clearFromCredentials(key);
 };

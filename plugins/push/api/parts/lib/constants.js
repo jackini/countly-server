@@ -1,6 +1,6 @@
 'use strict';
 
-var exports, DEBUG = process.env.DEBUG;
+var exports;
 
 exports = module.exports = {
 	EVENTS: {
@@ -54,44 +54,63 @@ exports = module.exports = {
 		statusUpdatePeriod: 2000,
 		/** Maintain (do not close immediately after sending) no more than 50 connections per worker */
 		connections: 50,
-		/** Keep no more than 50000 messages per connection in memory. Whenever sending is slower than messages stream,
-		 * input stream will be throttled down (if using devicesQuery), or send method will just return false.
-		 * Keep this option high, EXPERIMENTAL FEATURE.
-		 */
-		queue: 50000,
-		/** Maintain (do not close immediately after sending) no more than 20 connections per worker per app.
-		 * This effectively means that no more than 20 messages per app are being sent at any point in time.
-		 * APNS part maintains 20 connections while GCM part sends 20 parallel requests with core keep-alive functionality.
-		 */
-		connectionsPerCredentials: 20,
+		/** No more 50 messages can be sent simultaneously */
+		concurrentMessages: 50,
 		/** How much devices is required to open up additional connection within a worker (but no more than connectionsPerCredentials).
 		 * 100 000 devices / 1000 = 100, but no more than 20 = 20 connections will be open when sending a message to 100 000 devices.
 		 */
 		connectionDivider: 10,
-		/** 1 minute connection TTL */
-		connectionTTL: 1000 * 60 * 100,
-		/** 3 seconds to connect for a socket */
-		connectionConnectTimeout: 1000 * 5,
+		/** 60 minute connection TTL */
+		connectionTTL: 60 * 60 * 1000,
+		/** 1 minute event TTL (waiting for tokens, freeing event loop, etc.) */
+		eventTTL: 60 * 60 * 1000,
 		/** Part of worker picking algorithm: ( (hasConnection ? 0 : priceOfConnection) + priceOfQueue * queueLength ) */
 		priceOfConnection: 100,
 		/** Part of worker picking algorithm: ( (hasConnection ? 0 : priceOfConnection) + priceOfQueue * queueLength ) */
 		priceOfQueue: 10,
 		/** How much connections can be closed or opened at once */
 		maxImmediatePoolChange: 2,
-		/** How much certificates to hold in memory instead of reading from file */
-		apnsCertificatesCache: 50,
-		/** How much APN notifications to transmit in a batch */
-		apnsTransmitAtOnce: 100,
-		/** How long to wait until next batch is sent (event loop delay is added to this delay) */
-		apnsTransmitAtOnceDelay: 10,
-		/** How much GCM notifications to transmit in a batch for the same content */
-		gcmTransmitAtOnce: 50,
-		/** How much notifications to hold in memory in order to process error responses from APNS.
-		 * APNS can respond with error to a particular notificaton with some delay. This cache ensures that notification
-		 * which caused an error is still in memory so we could report about it to a sender.
-		 * 1000 Notifications are being held in memory per 1 APNS connection.
-		 */
-		apnsNotificationCacheForErrorPurposes: 5000,
+
+		apn: {
+			/** Maintain a signle connection per worker. */
+			connectionsPerCredentials: 1,
+			/** Send 100 or less requests each event loop (HTTP/2 streams) */
+			transmitAtOnce: 100,
+			/** Allow transmitAtOnce to change until eventLoopDelayToThrottleDown is met */
+			transmitAtOnceAdjusts: true,
+			/** If adjusts, for how much tops (HTTP/2 streams) */
+			transmitAtOnceMaxAdjusted: 400,
+			/** How much simultaneous requests can be in processing */
+			maxRequestsInFlight: 899,
+			/** How much certificates to hold in memory instead of reading from file */
+			certificatesCache: 50,
+			/** Keep no more than 50000 messages per connection in memory. Whenever sending is slower than messages stream,
+			 * input stream will be throttled down (if using devicesQuery), or send method will just return false.
+			 * Keep this option high.
+			 */
+			queue: 50000,
+			/** Min event loop wait in ms smoothed at 10% (10 measurements) to skip processing in current loop */
+			eventLoopDelayToThrottleDown: 300,
+		},
+
+		gcm: {
+			/** Maintain (do not close immediately after sending) no more than 20 connections.
+			 */
+			connectionsPerCredentials: 20,
+			/** How much GCM notifications to transmit in a batch for the same content */
+			transmitAtOnce: 50,
+			/** Allow transmitAtOnce to change until eventLoopDelayToThrottleDown is met */
+			transmitAtOnceAdjusts: false,
+			/** How much simultaneous requests can be in processing */
+			maxRequestsInFlight: 50,
+			/** Keep no more than 50000 messages per connection in memory. Whenever sending is slower than messages stream,
+			 * input stream will be throttled down (if using devicesQuery), or send method will just return false.
+			 * Keep this option high.
+			 */
+			queue: 50000,
+			/** Min event loop wait in ms smoothed at 10% (10 measurements) to skip processing in current loop */
+			eventLoopDelayToThrottleDown: 300,
+		},
 
 		/**
 		 * Start with this number of connections
@@ -133,51 +152,4 @@ exports = module.exports = {
 		ratesToLeftSeconds: 60, 				// 60 seconds or more to send queue with current rate -> grow
 		ratesToLeftWeight: 0.25, 				// weight of ratesToLeftSeconds as opposed to growth / shrink ratio, 0.25 means that rates to left is 3 times less important than growth / shrink ratio
 	},
-	debugs: [],
-	debugsEnabled: [],
-	debug: function(module){
-		try {
-			if (!(module in exports.debugs)) {
-				var func = require('debug')('pushly:' + module);
-				exports.debugs[module] = function(){
-					if (exports.debugsEnabled[module]) {
-						func.apply(this, arguments);
-					}
-				};
-				exports.debugs[module].setEnabled = function(enabled) {
-					console.log((enabled ? 'Enabling' : 'Disabling') + ' ' + module);
-					exports.debugsEnabled[module] = !!enabled;
-					if (exports.debugsEnabled[module]) {
-						require('debug').enable('pushly:' + module);
-						func = require('debug')('pushly:' + module);
-					} else {
-						require('debug').disable('pushly:' + module);
-					}
-				};
-				exports.debugsEnabled[module] = DEBUG && (DEBUG.indexOf('pushly:' + module) !== -1 || DEBUG.indexOf('pushly:*') !== -1 || DEBUG === '*');
-				console.log((exports.debugsEnabled[module] ? 'Enabled ' : 'Disabled ') + module);
-
-				// if (DEBUG && (DEBUG.indexOf('pushly:' + module) !== -1 || DEBUG.indexOf('pushly:*') !== -1 || DEBUG === '*')) {
-				// 	console.log('Enabled ' + module + ' due to DEBUG env var:' + DEBUG);
-				// 	exports.debugs[module].setEnabled(true);
-				// } else {
-				// 	console.log('Disabled ' + module + ' due to DEBUG env var: ' + DEBUG);
-				// }
-			}
-			return exports.debugs[module];
-		}
-		catch (e) {
-			// console.log('Notice: "debug" module is not available. This should be installed with `npm install debug` to enable debug messages', e);
-			return function() {};
-		}
-	},
-	setDebugEnabled: function(module, enabled) {
-		if (module && module in exports.debugs) {
-			exports.debugs[module].setEnabled(enabled);
-		} else if (!module) {
-			for (module in exports.debugs) {
-				exports.debugs[module].setEnabled(enabled);
-			}
-		}
-	}
 };

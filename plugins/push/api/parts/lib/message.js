@@ -112,22 +112,7 @@ var Message = function (opts) {
     // Devices part
     if (opts.devices) {
         if (opts.devices.length) {
-            if (opts.credentials.platform === Platform.APNS) {
-                this.devices = [];
-                opts.devices.forEach(function(d){
-                    if (d instanceof Buffer) {
-                        this.devices.push(d);
-                    } else if (typeof d === 'string') {
-                        this.devices.push(new Buffer(d.replace(bufferRegexp, ''), 'hex'));
-                    } else if (d.type === 'Buffer') {
-                        this.devices.push(new Buffer(d.data));
-                    } else if (d.length) {
-                        this.devices.push(new Buffer(d));
-                    }
-                }.bind(this));
-            } else {
-                this.devices = opts.devices;
-            }
+            this.devices = opts.devices;
         } else {
             throw new Error('Message must have non-empty array of devices or devicesQuery');
         }
@@ -182,17 +167,7 @@ var Message = function (opts) {
         },
         prepareToken: {
             value: function (token) {
-                if (opts.credentials.platform === Platform.APNS) {
-                    if (token instanceof Buffer) {
-                        return token;
-                    } else if (typeof token === 'string') {
-                        return new Buffer(token);
-                    } else if (token.type === 'Buffer') {
-                        return new Buffer(token.data);
-                    }
-                } else {
-                    return token;
-                }
+                return token;
             }
         },
         compileWithMessage: {

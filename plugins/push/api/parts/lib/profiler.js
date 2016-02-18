@@ -4,8 +4,7 @@ var util = require('util'),
 	os = require('os'),
 	EventEmitter = require('events').EventEmitter,
 	ps = require('crazy-ps'),
-	constants = require('./constants'),
-	debug = constants.debug('profiler');
+	log = require('../../../../../api/utils/log.js')('push:profiler');
 
 /**
  * Semiexponentially decaying moving average
@@ -20,7 +19,7 @@ var ValueSmoother = function(initialFactor, factorEasing) {
 
 	this.push = function(val) {
 		if (!this.count) {
-			this.value = val;
+			this.value = 1.0 * val;
 		} else {
 			var f = this.easedFactor();
 			if (!isFinite((1.0 - f) * this.value + f * val)) {
@@ -107,7 +106,7 @@ var ProcessProfiler = function(checkPeriod) {
 
 	this.check = function() {
 		try {
-			ps(this.mid || process.pid, function (err, result) {
+			ps(process.pid, function (err, result) {
 				var now = Date.now();
 				setImmediate(function(){
 					this.loop.push(Date.now() - now);
@@ -118,11 +117,11 @@ var ProcessProfiler = function(checkPeriod) {
 				} else {
 					this.cpu.push(result.cpu);
 					this.memory.push(os.freemem() / os.totalmem());
-					debug('CPU %j \t Memory %j \t loop %j \t process %j', this.cpu.value.toFixed(2), this.memory.value.toFixed(2), this.loop.value.toFixed(2), result);
+					log.d('CPU %j \t Memory %j \t loop %j \t process %j', this.cpu.value.toFixed(2), this.memory.value.toFixed(2), this.loop.value.toFixed(2), result);
 				}
 			}.bind(this));
 		} catch (e) {
-			console.log('Warning: could not check CPU amount because of %j', e);
+			log.w('Warning: could not check CPU amount because of %j', e);
 		}
 		if (!this.closed) { setTimeout(this.check.bind(this), checkPeriod); }
 	};

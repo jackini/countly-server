@@ -18,19 +18,15 @@ then
     countly plugin enable sources ;
 fi
 
-#update crashes dependencies
-CRASHSTATE=$(countly plugin status crashes);
-if [ "$CRASHSTATE" == "enabled" ] 
-then
-    countly plugin upgrade crashes ;
-fi
+#upgrade push plugin if it is installed
+countly plugin upgrade push
 
 #uninstall mognodb
 #apt-get remove -y mongodb-org mongodb-org-mongos mongodb-org-server mongodb-org-shell mongodb-org-tools
 #rm /etc/apt/sources.list.d/mongodb-10gen-countly.list
 
 #update repos
-wget -qO- https://deb.nodesource.com/setup_4.x | bash -
+wget -qO- https://deb.nodesource.com/setup_5.x | bash -
 sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 7F0CEB10
 #echo "deb http://repo.mongodb.org/apt/ubuntu trusty/mongodb-org/3.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-3.0.list
 

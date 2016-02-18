@@ -11,7 +11,7 @@ var util = require('util'),
 	EVENTS = constants.EVENTS,
 	SP = constants.SP,
 	DEFAULTS = constants.OPTIONS,
-	debug = constants.debug('worker'),
+	log = require('../../../../../api/utils/log.js')('push:worker'),
 	_ = require('lodash');
 
 /**
@@ -48,17 +48,17 @@ var PushlyWorker = function(opts, callbacks) {
 	process.on('message', function(m){
 		this.profiler.mid = m.mid;
 		if (typeof this[m.cmd] === 'function') {
-			debug('IPC message from master: %j', m);
+			log.d('IPC message from master: %j', m);
 			this[m.cmd](m);
 		}
 	}.bind(this));
 
-    debug('Worker started %d', process.pid);
+    log.i('Worker started %d', process.pid);
 };
 util.inherits(PushlyWorker, EventEmitter);
 
 PushlyWorker.prototype.connect = function(message, closeBeforeOpening) {
-	debug('Connect');
+	log.d('Connect');
 
 	if (closeBeforeOpening && this.connections[message.credentialsId()]) {
 		this.connections[message.credentialsId()].close();
@@ -78,7 +78,7 @@ PushlyWorker.prototype.connect = function(message, closeBeforeOpening) {
 		// Notification is sent (one or more tokens)
 		connection.on(SP.MESSAGE, function(conn, messageId, size){
             size = size || 1;
-			debug('Batch sent for message %j: %d notifications', messageId, size);
+			// log.d('Batch sent for message %j: %d notifications', messageId, size);
 			if (messageId in this.messages) {
 				var msg = this.messages[messageId];
 
@@ -93,33 +93,33 @@ PushlyWorker.prototype.connect = function(message, closeBeforeOpening) {
 				msg.result.processed += size;
 				this.updateMessage(msg);
 			} else {
-				debug('!!!!!!!!!!No message %j in process %d', messageId, process.id);
+				log.w('!!!!!!!!!!No message %j in process %d', messageId, process.pid);
 			}
 		}.bind(this));
 
 		connection.on(SP.ERROR, function(conn, err){
-			debug('Error for message: %j', err);
+			log.d('Error for message: %j', err);
 
 			if (err.messageId && err.messageId in this.messages) {
 				this.updateMessage(this.messages[err.messageId], true, err);
 			} else if (err.messageId) {
-				debug('!!!!!!!!!!No message %j in process %d', err.messageId, process.id);
+				log.w('!!!!!!!!!!No message %j in process %d', err.messageId, process.pid);
 			}
 		}.bind(this));
 
 		connection.on(SP.CLOSED, function(conn){
-			debug('Cluster is closed, aborting all messages');
+			log.d('Cluster is closed, aborting all messages');
 			var credentialsId;
 
 			for (var k in this.messages) {
-				debug('Aborting message id %j: %j', k, this.messages[k]);
+				log.d('Aborting message id %j: %j', k, this.messages[k]);
 
 				var m = this.messages[k],
 					c = this.connections[m.credentialsId()];
 
 				if (c === conn) {
 					if (!(m.result.status & M.Status.Done)) {
-						debug('Aborting message %j because cluster is closed', m.id);
+						log.d('Aborting message %j because cluster is closed', m.id);
 						m.result.status &= ~M.Status.InProcessing;
 						m.result.status |= M.Status.Aborted;
 						this.updateMessage(m, true);
@@ -128,9 +128,9 @@ PushlyWorker.prototype.connect = function(message, closeBeforeOpening) {
 				}
 			}
 
-			debug('Cluster is closed, removing cluster %j from connections: %d', conn.credentials.id, this.connections.length);
+			log.d('Cluster is closed, removing cluster %j from connections: %d', conn.credentials.id, this.connections.length);
 			this.connections.remove(conn.credentials.id);
-			debug('Cluster is closed, removed cluster %j from connections: %d', conn.credentials.id, this.connections.length);
+			log.d('Cluster is closed, removed cluster %j from connections: %d', conn.credentials.id, this.connections.length);
 
 			if (this.connections.length === 0) {
 				this.profiler.close();
@@ -143,14 +143,14 @@ PushlyWorker.prototype.connect = function(message, closeBeforeOpening) {
 };
 
 PushlyWorker.prototype.checkQueue = function(immediate) {
-	debug('Checking queue');
-	if (this.messages.length < this.options.connectionsPerCredentials) {
+	log.d('Checking queue');
+	if (this.messages.length < this.options.concurrentMessages) {
 		var next = this.queue.next();
 		if (next) {
 			this.start(next);
 		}
 	} else {
-		debug('Queue is full');
+		log.d('Queue is full');
 	}
 	if (!immediate){
 		setTimeout(1000, this.checkQueue.bind(this));
@@ -159,11 +159,7 @@ PushlyWorker.prototype.checkQueue = function(immediate) {
 
 // var i = 0;
 PushlyWorker.prototype.sendToConnection = function(connection, message, content, encoding, expires, device, locale) {
-	message.result.total += util.isArray(device) ? device.length : 1;
-	if (typeof device === 'string' && message.credentials.platform === M.Platform.APNS) {
-		device = new Buffer(device.replace(/[^0-9a-f]/gi, ''), 'hex');
-	}
-	// content.data.some = 'data' + i++;
+	message.result.total += util.isArray(device) && typeof device[0] !== 'string' ? device.length : 1;
 	return connection.send(message.id, content, encoding, expires, device, locale);
 };
 
@@ -179,12 +175,12 @@ PushlyWorker.prototype.startMessageStatusUpdater = function(message) {
 };
 
 PushlyWorker.prototype.start = function(message) {
-	debug('Going to send message %j', message.id);
+	log.d('Going to send message %j', message);
 	this.messages.add(message);
 
 	var closeBeforeOpening = message.content.message === '[CLY]_test_message';
 	if (closeBeforeOpening) {
-		debug('Going to clear from credentials %j', message.credentials.key);
+		log.d('Going to clear from credentials %j', message.credentials.key);
 		Connection.clearFromCredentials(message.credentials.key);
 	}
 
@@ -194,12 +190,12 @@ PushlyWorker.prototype.start = function(message) {
 			expires = message.expiryDate,
 			encoding = message.content.encoding;
 
-		debug('Starting message %j with content %j', message.id, content);
+		log.d('Starting message %j with content %j (expires %j)', message.id, content, expires);
 
 		var f = this.sendToConnection.bind(this, connection, message, content, encoding, expires),
 			t = function(){
 				if (message && (message.result.status & M.Status.Done) > 0) {
-					debug('Unfininshing message %j', message.id);
+					log.d('Unfininshing message %j', message.id);
 					message.result.status &= ~M.Status.Done;
 					message.result.status |= M.Status.InProcessing;
 					this.cancelCleanupFromMessageId(message.id);
@@ -227,7 +223,7 @@ PushlyWorker.prototype.start = function(message) {
 };
 
 PushlyWorker.prototype.push = function(message) {
-	debug('Pushing new message %j', message.id);
+	log.d('Pushing new message %j', message.id);
 	this.messages.add(message);
 	process.send({
 		pid: process.pid,
@@ -237,7 +233,7 @@ PushlyWorker.prototype.push = function(message) {
 };
 
 PushlyWorker.prototype.abort = function(message) {
-	debug('Aborting message %j from worker', message.id);
+	log.d('Aborting message %j from worker', message.id);
 	process.send({
 		pid: process.pid,
 		cmd: EVENTS.MASTER_ABORT,
@@ -248,7 +244,7 @@ PushlyWorker.prototype.abort = function(message) {
 PushlyWorker.prototype.send = function(connection, messageId, content, expires, encoding, device) {
 	var message = this.messages[messageId];
 	if (message && (message.result.status & M.Status.Done) > 0) {
-		debug('Sending %j notes for %j (status %j)', device.length, messageId, message.result.status);
+		log.d('Sending %j notes for %j (status %j)', device.length, messageId, message.result.status);
 		message.result.status &= ~M.Status.Done;
 		message.result.status |= M.Status.InProcessing;
 		this.cancelCleanupFromMessageId(messageId);
@@ -260,7 +256,7 @@ PushlyWorker.prototype.send = function(connection, messageId, content, expires, 
 			result: message.result
 		});
 	} else {
-		debug('Sending %j notes for new %j', device.length, messageId);
+		log.d('Sending %j notes for new %j', device.length, messageId);
 	}
 
 	connection.send(content, encoding, expires, device);
@@ -288,15 +284,15 @@ PushlyWorker.prototype[EVENTS.CHILD_PROCESS] = function(m) {
 PushlyWorker.prototype[EVENTS.CHILD_ABORT] = function(m) {
 	var message = this.messages[m.messageId];
 	if (message) {
-		debug('Aborting message %j with status %j by master\'s order', m.messageId, message.result.status);
+		log.d('Aborting message %j with status %j by master\'s order', m.messageId, message.result.status);
 		var connection = this.connections[message.credentialsId()];
 		if (connection) {
-			debug('Going to abort message %j on connection %j', m.messageId, connection.idx);
+			log.d('Going to abort message %j on connection %j', m.messageId, connection.idx);
 			connection.abort(message);
 		}
 		message.result.status &= ~M.Status.InProcessing;
 		message.result.status |= M.Status.Aborted;
-		debug('Updating status of message %j with status %j', m.messageId, message.result.status);
+		log.d('Updating status of message %j with status %j', m.messageId, message.result.status);
 		setTimeout(this.updateMessage.bind(this, message, true), 1000);
 		// this.updateMessage(message, true);
 	}
@@ -307,24 +303,13 @@ PushlyWorker.prototype[EVENTS.CHILD_ABORT] = function(m) {
  * @api private
  */
 PushlyWorker.prototype[EVENTS.CHILD_STATUS] = function(m) {
-	debug('Emiting status: %j', m);
+	log.d('Emiting status: %j', m);
     if (m.messageId in this.messages) {
         this.messages[m.messageId].result = m.result;
         this.emit('status', this.messages[m.messageId]);
     } else {
-    	debug('!!!!!!!!!!!!!!No message %j in messages of worker %d', m.messageId, process.pid);
+    	log.d('!!!!!!!!!!!!!!No message %j in messages of worker %d', m.messageId, process.pid);
     }
-	// var message = this.messages[m.messageId], result = {status: M.Status.Aborted};
-	// if (message) {
-	// 	result = message.result;
-	// }
-
-	// process.send({
-	// 	pid: process.pid,
-	// 	cmd: EVENTS.MASTER_STATUS,
-	// 	messageId: m.messageId,
-	// 	result: message.result
-	// });
 };
 
 /**
@@ -345,7 +330,7 @@ PushlyWorker.prototype.updateMessage = function(message, immediate, error) {
 		immediate = error.code !== Err.TOKEN;
 	}
 
-	debug('Updating message %j in process %d: %j, %j, %j', message.id, process.pid, message.result, immediate, error);
+	// log.d('Updating message %j in process %d: %j, %j, %j', message.id, process.pid, message.result, immediate, error);
 
 	if (error) {
 		if (error.code & Err.IS_NON_RECOVERABLE) {
@@ -394,9 +379,9 @@ PushlyWorker.prototype.updateMessage = function(message, immediate, error) {
 				result: message.result
 			});
 		}
-		debug('%j: Updated message %j in process %d with master notification: %j, %j, %j', new Date().toString(), message.id, process.pid, message.result, immediate, error);
+		log.d('Updated message %j in process %d with master notification: %j, %j, %j', message.id, process.pid, message.result, immediate, error);
 	} else {
-		debug('%j: Updated message %j in process %d: %j, %j, %j (immediate %d, statusTimes %d)', new Date().toString(), message.id, process.pid, message.result, immediate, error, immediate, this.messagesStatusTimes[message.id] - (Date.now() - this.options.statusUpdatePeriod));
+		// log.d('Updated message %j in process %d: %j, %j, %j (immediate %d, statusTimes %d)', message.id, process.pid, message.result, immediate, error, immediate, this.messagesStatusTimes[message.id] - (Date.now() - this.options.statusUpdatePeriod));
 	}
 
 };
@@ -406,29 +391,29 @@ PushlyWorker.prototype.updateMessage = function(message, immediate, error) {
  * Remove message from private variables after 20 seconds delay (some device tokens might be not processed yet
  * @api private
  */
-PushlyWorker.prototype.cleanupFromMessageId = function(messageId) {
+PushlyWorker.prototype.cleanupFromMessageId = function(messageId, immediate) {
 	if (!(messageId in this.cleanUps)) {
-    	debug('Going to clean up message %j from worker %d in 20 seconds', messageId, process.pid);
+    	log.d('Going to clean up message %j from worker %d in %d seconds', messageId, process.pid, immediate ? 0 : 20);
 		this.cleanUps[messageId] = setTimeout(function(){
 			if (messageId in this.messages && !(this.messages[messageId].result.status & M.Status.Done)) {
-				debug('Won\'t clean up message because it\'s not done yet');
+				log.d('Won\'t clean up message because it\'s not done yet');
 			} else {
-		    	debug('Cleaning up message %j from worker %d', messageId, process.pid);
+		    	log.d('Cleaning up message %j from worker %d', messageId, process.pid);
 		    	if (this.messages[messageId]) this.updateMessage(this.messages[messageId], true);
 		    	this.messages.remove(messageId);
 	        	delete this.messagesStatusTimes[messageId];
-		    	debug('%d messages and %d connections are in worker %d after cleanup: %j', this.messages.length, this.connections.length, process.pid, this.messages);
+		    	log.d('%d messages and %d connections are in worker %d after cleanup: %j', this.messages.length, this.connections.length, process.pid, this.messages);
 		    	if (this.connections.length === 0) {
 		    		this.profiler.close();
 		    	}
 			}
-    	}.bind(this), 20000);
+    	}.bind(this), immediate ? 1 : 20000);
 	}
 };
 
 PushlyWorker.prototype.cancelCleanupFromMessageId = function(messageId) {
 	if (messageId in this.cleanUps) {
-    	debug('Going to cancel message %j clean up from worker %d', messageId, process.pid);
+    	log.d('Going to cancel message %j clean up from worker %d', messageId, process.pid);
 		clearTimeout(this.cleanUps[messageId]);
 		delete this.cleanUps[messageId];
 	}
@@ -441,10 +426,6 @@ PushlyWorker.prototype.setLoggingEnabled = function(enabled) {
 		cmd: EVENTS.MASTER_SET_LOGGING,
 		enable: enabled
 	});
-};
-
-PushlyWorker.prototype.log = function() {
-	debug.apply(debug, arguments);
 };
 
 var Queue = function(){};
@@ -462,11 +443,11 @@ var Messages = function(){
     Object.defineProperties(this, {
         add: {
             value: function(message, value){
-            	debug('adding %j message %j', message, value);
+            	log.d('adding %j message %j', message, value);
             	if (!this[message.id || message]) {
             		this.length++;
             		this[message.id || message] = value || message;
-	            	debug('added %j', this[message.id || message]);
+	            	log.d('added %j', this[message.id || message]);
             	}
 			}
         },

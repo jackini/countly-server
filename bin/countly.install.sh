@@ -29,7 +29,7 @@ fi
 
 #add node.js repo
 #echo | apt-add-repository ppa:chris-lea/node.js
-wget -qO- https://deb.nodesource.com/setup_4.x | bash -
+wget -qO- https://deb.nodesource.com/setup_5.x | bash -
 
 #add mongodb repo
 #echo "deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen" > /etc/apt/sources.list.d/mongodb-10gen-countly.list
@@ -92,6 +92,9 @@ fi
 #install plugins
 bash $DIR/scripts/countly.install.plugins.sh
 
+#get web sdk
+countly update sdk-web
+
 #compile scripts for production
 cd $DIR && grunt dist-all
 
@@ -100,4 +103,3 @@ if [ "$INSIDE_DOCKER" != "1" ]
 then
 	countly start
 fi
-countly update sdk-web

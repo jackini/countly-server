@@ -8,7 +8,7 @@ var EventEmitter = require('events').EventEmitter,
 	constants = require('./constants'),
 	EVENTS = constants.EVENTS,
 	DEFAULTS = constants.OPTIONS,
-	debug = constants.debug('master'),
+	log = require('../../../../../api/utils/log.js')('push:master'),
 	M = require('./message'),
 	_ = require('lodash');
 
@@ -28,13 +28,13 @@ var WorkerWrapper = function(worker, master){
 	this.send = function(cmd) {
 		cmd.pid = this.pid;
 		cmd.mid = this.mid;
-		debug('Sending IPC from master %d to worker %d: %j', process.pid, this.pid, cmd);
+		log.d('Sending IPC from master %d to worker %d: %j', process.pid, this.pid, cmd);
 		this.worker.send(cmd);
 	};
 
 	worker.on('message', function(m){
 		if (typeof this[m.cmd] === 'function') {
-			debug('IPC message from %s: %j', m.pid, m);
+			log.d('IPC message from %s: %j', m.pid, m);
 			this[m.cmd](m);
 		}
 	}.bind(master));
@@ -67,21 +67,21 @@ var Master = function(opts) {
 	}.bind(this));
 
 	cluster.on('exit', function(worker){
-		debug('Worker crashed: %d', worker.process.pid);
+		log.e('Worker crashed: %d', worker.process.pid);
 		_.remove(this.workers, {id: worker.pid});
 	}.bind(this));
 
 	process.on('uncaughtException', function(err){
-		debug('uncaughtException on process: %j', err.stack);
+		log.e('uncaughtException on process: %j', err.stack);
 	}.bind(this));
 
-    debug('Master started %d', process.pid);
+    log.i('Master started %d', process.pid);
 };
 
 util.inherits(Master, EventEmitter);
 
 Master.prototype.push = function(message) {
-	debug('Pushing new message %j from master', message.id);
+	log.d('Pushing new message %j from master', message.id);
 	this[EVENTS.MASTER_SEND]({
 		cmd: EVENTS.MASTER_SEND,
 		message: message.serialize()
@@ -89,7 +89,7 @@ Master.prototype.push = function(message) {
 };
 
 Master.prototype.abort = function(message) {
-	debug('Aborting message %j from master', message.id);
+	log.d('Aborting message %j from master', message.id);
 	this[EVENTS.MASTER_ABORT]({
 		cmd: EVENTS.MASTER_ABORT,
 		message: message.serialize()
@@ -184,7 +184,7 @@ Master.prototype[EVENTS.MASTER_SET_LOGGING] = function(m) {
 Master.prototype.cleanupFromMessageId = function(messageId) {
 	if (!(messageId in this.cleanUps)) {
 		this.cleanUps[messageId] = setTimeout(function(){
-			debug('Cleaning up message %j from master', messageId);
+			log.d('Cleaning up message %j from master', messageId);
 		    delete this.messages[messageId];
 		    delete this.tasks[messageId];
 		    delete this.tasksInitiators[messageId];
@@ -206,14 +206,14 @@ Master.prototype.update = function(message, update) {
 	}
 
 	if (message.id in this.tasksInitiators) {
-		debug('Emiting status on initiator worker: %j, %j', message.id, update);
+		log.d('Emiting status on initiator worker: %j, %j', message.id, update);
 		this.tasksInitiators[message.id].send(merge({
 			cmd: EVENTS.CHILD_STATUS,
 			messageId: message.id,
 			result: update,
 		}, update));
 	} else {
-		debug('Emiting status on master');
+		log.d('Emiting status on master');
 		this.emit('status', message);
 	}
 };
@@ -223,8 +223,8 @@ Master.prototype.setLoggingEnabled = function(enabled) {
 	this[EVENTS.MASTER_SET_LOGGING]({enable: enabled});
 };
 
-Master.prototype.log = function() {
-	debug.apply(debug, arguments);
-};
+// Master.prototype.log = function() {
+// 	log.d.apply(log, arguments);
+// };
 
 module.exports = Master;

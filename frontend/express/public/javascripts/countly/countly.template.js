@@ -1296,11 +1296,16 @@ window.CountriesView = countlyView.extend({
         if (!isRefresh) {
             $(this.el).html(this.template(this.templateData));
 
-            if (this.cityView) {
-                countlyCity.drawGeoChart({height:450, metric:self.maps[self.curMap]});
-                $("#toggle-map").addClass("active");
-            } else {
-                countlyLocation.drawGeoChart({height:450, metric:self.maps[self.curMap]});
+            if(countlyGlobal["config"].use_google){
+                if (this.cityView) {
+                    countlyCity.drawGeoChart({height:450, metric:self.maps[self.curMap]});
+                    $("#toggle-map").addClass("active");
+                } else {
+                    countlyLocation.drawGeoChart({height:450, metric:self.maps[self.curMap]});
+                }
+            }
+            else{
+                $(".widget-content.geo-switch").hide();
             }
 
             this.drawTable();
@@ -1354,10 +1359,12 @@ window.CountriesView = countlyView.extend({
                 var locationData;
                 if (self.cityView) {
                     locationData = countlyCity.getLocationData();
-                    countlyCity.refreshGeoChart(self.maps[self.curMap]);
+                    if(countlyGlobal["config"].use_google)
+                        countlyCity.refreshGeoChart(self.maps[self.curMap]);
                 } else {
                     locationData = countlyLocation.getLocationData();
-                    countlyLocation.refreshGeoChart(self.maps[self.curMap]);
+                    if(countlyGlobal["config"].use_google)
+                        countlyLocation.refreshGeoChart(self.maps[self.curMap]);
                 }
 
                 CountlyHelpers.refreshTable(self.dtable, locationData);
@@ -1795,7 +1802,7 @@ window.DurationView = countlyView.extend({
                 "aaData": durationData.chartData,
                 "aoColumns": [
                     { "mData": "ds", sType:"session-duration", "sTitle": jQuery.i18n.map["session-duration.table.duration"] },
-                    { "mData": "t", sType:"formatted-num", "mRender":function(d) { return countlyCommon.formatNumber(d); }, "sTitle": jQuery.i18n.map["common.number-of-users"] },
+                    { "mData": "t", sType:"formatted-num", "mRender":function(d) { return countlyCommon.formatNumber(d); }, "sTitle": jQuery.i18n.map["common.number-of-sessions"] },
                     { "mData": "percent", "sType":"percent", "sTitle": jQuery.i18n.map["common.percent"] }
                 ]
             }));
@@ -2701,7 +2708,7 @@ window.EventsView = countlyView.extend({
                         return elem;
                     },
                     cursor:"move",
-                    containment:"parent",
+                    containment:false,
                     tolerance:"pointer",
                     placeholder:"event-row-placeholder",
                     stop:function (e, elem) {
@@ -2964,11 +2971,11 @@ var AppRouter = Backbone.Router.extend({
         if(location.hash != "#/" && countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID]){
             $("#"+countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID].type+"-type a").each(function(){
                 if(this.hash != "#/" && this.hash != ""){
-                    if(location.hash == this.hash && $(this).is(":visible")){
+                    if(location.hash == this.hash && $(this).css('display') != 'none' ){
                         change = false;
                         return false;
                     }
-                    else if(location.hash.indexOf(this.hash) == 0 && $(this).is(":visible")){
+                    else if(location.hash.indexOf(this.hash) == 0 && $(this).css('display') != 'none'){
                         redirect = this.hash;
                         return false;
                     }

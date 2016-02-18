@@ -1,8 +1,9 @@
 'use strict';
 
 var _               = require('underscore'),
-    common 			= require('../../../../../api/utils/common.js'),
-	pushly 			= require('pushly')(),
+    common 			= require('../../../../api/utils/common.js'),
+    log             = common.log('push:scheduler'),
+	pushly 			= require('./lib')(),
     mess            = require('./message.js'),
     cluster			= require('cluster'),
     Message         = mess.Message,
@@ -10,6 +11,7 @@ var _               = require('underscore'),
 
 var check = function() {
     function addPushly(appId, match, creds, query, message, pushly) {
+        log.d('Adding pushly message for %j with creds %j & query %j & match %j', message, creds, query, match);
         common.db.collection('app_users' + appId).count(match, function(err, count){
             if (count) {
                 var updateQuery = _.extend({}, query);
@@ -22,13 +24,16 @@ var check = function() {
                         $set: {'result.status': MessageStatus.InQueue}
                     };
 
+                log.d('Adding pushly to %j (%d): %j', {_id: message._id}, count, upd);
                 common.db.collection('messages').update(
                     {_id: message._id},
                     upd, 
                     function(){
-                    	pushly.push(msg);
+                        pushly.push(msg);
                     }
                 );
+            } else {
+                log.d('Won\'t add pushly message for %j with creds %j & query %j: %j / %j', message, creds, query, err, count);
             }
         });
     }
@@ -40,10 +45,12 @@ var check = function() {
 		{'new': true},
 
 		function(err, message){
-            message = message.value;
+            message = message ? message.value : null;
 			if (message) {
+                log.d('Processing message %j', message);
+
 				message = new Message(message);
-				var conditions = message.getUserCollectionConditions(), toPush = [];
+				var conditions = message.getUserCollectionConditions();
 
                 // pushly submessages
 				message.pushly = [];
@@ -60,6 +67,8 @@ var check = function() {
 							var query = {appId: appId, conditions: conditions},
 								credentials = require('./endpoints.js').credentials(message, app);
 
+                            log.d('Credentials for message %j', credentials);
+
                             if (credentials.length === 0) {
                                 // no device credentials is provided for all app-platform-(test or not) combinations
                                 common.db.collection('messages').update({_id: message._id}, {$set: {
@@ -73,7 +82,7 @@ var check = function() {
 
                                     var field = creds.id.split('.')[0],
                                         match = _.extend({}, conditions);
-                                    match[common.dbUserMap.tokens + '.' + field] = {$exists: true};
+                                    match[common.dbUserMap.tokens + field] = true;
 
                                     // count first to prevent no users errors within some of app-platform combinations
                                     // of the message which will turn message status to error
@@ -81,7 +90,7 @@ var check = function() {
                                 }
                             }
 						} else {
-                            console.log('!!!!!!!!!!!!! App not found in findAndModify !!!');
+                            log.e('!!!!!!!!!!!!! App not found in findAndModify !!!');
                         }
 					}
 
@@ -101,7 +110,7 @@ var periodicCheck = function(){
     if (cluster.isMaster) {
         if (!launched) {
             setTimeout(function(){  // wait for app to start
-                common.db.collection('messages').update({'result.status': {$in: [MessageStatus.Initial, MessageStatus.InProcessing, MessageStatus.InProcessing | MessageStatus.Done, MessageStatus.InQueue]}}, {$set: {'result.status': MessageStatus.Done | MessageStatus.Aborted | MessageStatus.Error}}, {multi: true}, function(){
+                common.db.collection('messages').update({'result.status': {$in: [MessageStatus.Initial, MessageStatus.InProcessing, MessageStatus.InProcessing | MessageStatus.Done, MessageStatus.InQueue, MessageStatus.InQueue | MessageStatus.InProcessing]}}, {$set: {'result.status': MessageStatus.Done | MessageStatus.Aborted | MessageStatus.Error, 'result.error': 'Server was restarted when sending message'}}, {multi: true}, function(){
                     launched = true;
                     check();
                     setTimeout(periodicCheck, 3000);

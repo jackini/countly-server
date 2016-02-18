@@ -12,7 +12,7 @@ var STATUS = {
 	CANCELLED: 3,
 };
 
-var DELAY_BETWEEN_CHECKS = 1000,
+var DELAY_BETWEEN_CHECKS = 5000,
 	MAXIMUM_CONCURRENT_JOBS_PER_NAME = 10000,
 	MAXIMUM_IN_LINE_JOBS_PER_NAME = 20,
 	MAXIMUM_JOB_TIMEOUT = 20000;
@@ -387,6 +387,7 @@ var JobWorker = function(processors){
 		async.parallel(shutdowns, function(err){
 			if (err) { log.e('Error when shutting down job processors', err); }
 			log.w('Done shutting down jobs with %j', err);
+			process.exit(0);
 		}.bind(this));
 	}.bind(this);
 

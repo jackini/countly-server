@@ -70,9 +70,10 @@ PushlyError.IS_RECOVERABLE 			= 1 << 1;	// Notification can be resent									2
 PushlyError.IS_NON_RECOVERABLE 		= 1 << 2;	// Message cannot be processed									4
 PushlyError.IS_SKIPPABLE			= 1 << 3;	// Notification should be removed from queue					8
 
-PushlyError.CONNECTION 				= 1 << 6 | PushlyError.IS_RECOVERABLE;									//  66
-PushlyError.CREDENTIALS 			= 1 << 7 | PushlyError.IS_NON_RECOVERABLE;								// 	132
-PushlyError.MESSAGE 				= 1 << 8 | PushlyError.IS_NON_RECOVERABLE;								// 	260
-PushlyError.TOKEN 					= 1 << 9 | PushlyError.IS_RECOVERABLE | PushlyError.IS_SKIPPABLE;		// 	522
+PushlyError.CONNECTION 				= 1 << 6  | PushlyError.IS_RECOVERABLE;									//  66
+PushlyError.CREDENTIALS 			= 1 << 7  | PushlyError.IS_NON_RECOVERABLE;								// 	132
+PushlyError.MESSAGE 				= 1 << 8  | PushlyError.IS_NON_RECOVERABLE;								// 	260
+PushlyError.TOKEN 					= 1 << 9  | PushlyError.IS_RECOVERABLE | PushlyError.IS_SKIPPABLE;		// 	522
+PushlyError.ILLEGAL_STATE			= 1 << 10 | PushlyError.IS_NON_RECOVERABLE;								// 	1028
 
 module.exports = PushlyError;
