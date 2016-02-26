@@ -125,7 +125,7 @@ var common          = require('../../../../api/utils/common.js'),
                     });
                 }
 
-                var skipping = false, ids = [];
+                var skipping = false, aborted = false, ids = [];
 
                 common.db.collection('app_users' + query.appId).find(finalQuery, filter).sort({_id: 1}).limit(10000).each(function(err, user){
                     if (err) {
@@ -134,7 +134,7 @@ var common          = require('../../../../api/utils/common.js'),
                             log.w('====== Continuing streaming from %j', skip);
                             api.pushlyCallbacks.stream(message, query, callback, ask, skip);
                         }
-                    } else if (skipping) {
+                    } else if (skipping || aborted) {
                         return;
                     } else if (user) {
                         if (count % 100 === 0) {
@@ -144,10 +144,14 @@ var common          = require('../../../../api/utils/common.js'),
                         skip = user._id;
                         ids.push(user._id);
 
-                        if (callback(['' + user._id, common.dot(user, field)], user[common.dbUserMap.lang]) === 'such no power much sad') {
+                        var result = callback(['' + user._id, common.dot(user, field)], user[common.dbUserMap.lang]);
+                        if (result === 'such no power much sad') {
                             log.d('====== Much sad, trying again in a second starting from %j', skip);
                             skipping = true;
                             setTimeout(api.pushlyCallbacks.stream.bind(api.pushlyCallbacks, message, query, callback, ask, skip), 1000);
+                        } else if (result === 'so aborted no luck') {
+                            log.d('====== Much sad, won\'t continue streaming because message has been aborted');
+                            aborted = true;
                         }
                     } else {
                         if (count === 0 && !skip) {
@@ -182,17 +186,28 @@ var common          = require('../../../../api/utils/common.js'),
                                 $unset[field] = 1;
                                 $unset[field.replace('.', '')] = 1;
                             });
-                            log.d('Unsetting tokens in %j: %j / %j', 'app_users' + app, unsetQuery, {$unset: $unset, $pull: {msgs: messageId(message)}});
-                            common.db.collection('app_users' + app).update(unsetQuery, {$unset: $unset, $pull: {msgs: messageId(message)}}, function(){});
+                            log.d('Unsetting %d tokens in %j', unset.length, 'app_users' + app);
+                            common.db.collection('app_users' + app).update(unsetQuery, {$unset: $unset, $pull: {msgs: messageId(message)}}, {multi: true}, function(err){
+                                if (err) {
+                                    log.e('Couldn\'t unset tokens (%j, %j, %j): %j', 'app_users' + app, unsetQuery, {$unset: $unset, $pull: {msgs: messageId(message)}}, err);
+                                }
+                            });
                         }
 
-                        for (i = update.length - 1; i >= 0; i--) for (var f = fields.length - 1; f >= 0; f--) {
-                            var field = fields[f], upd = update[i], query = {}, set = {};
+                        update.forEach(upd => {
+                            fields.forEach(field => {
+                                var query = {}, set = {};
 
-                            query._id = upd.bad[0];
-                            set[field] = upd.good;
-                            common.db.collection('app_users' + app).update(query, {$set: set},function(){});
-                        }
+                                query._id = upd.bad[0];
+                                set[field] = upd.good;
+                                log.d('Updating tokens in %j: %j / %j', 'app_users' + app, query, {$set: set});
+                                common.db.collection('app_users' + app).update(query, {$set: set}, function(err){
+                                    if (err) {
+                                        log.e('Couldn\'t update tokens (%j, %j, %j): %j', 'app_users' + app, query, {$set: set}, err);
+                                    }
+                                });
+                            });
+                        });
                     }
                 });
             }

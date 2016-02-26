@@ -10,12 +10,15 @@ var util = require('util'),
 	log = require('../../../../../api/utils/log.js')('push:gcm'),
 	https = require('https');
 
-var GCM = function(options, loopSmoother){
+var GCM = function(options, loopSmoother, idx){
 	if (false === (this instanceof GCM)) {
-        return new GCM(options);
+        return new GCM(options, loopSmoother, idx);
     }
 
 	HTTP.call(this, merge({}, DEFAULTS.gcm, options), log, loopSmoother);
+
+    this.idx = idx;
+    this.requesting = false;
 };
 util.inherits(GCM, HTTP);
 
@@ -27,7 +30,7 @@ GCM.prototype.onRequestDone = function(response, note, devices, data) {
 
     this.notesInFlight -= this.noteDevice(note).length;
 
-    this.emit(EVENTS.MESSAGE, this.noteMessageId(note), this.noteDevice(note).length);
+    this.emit(EVENTS.MESSAGE, this.noteMessageId(note), devices.length);
 
 	if (code >= 500) {
         log.w('GCM Unavailable', code, data);
@@ -42,11 +45,15 @@ GCM.prototype.onRequestDone = function(response, note, devices, data) {
 		this.handlerr(note, Err.CONNECTION, 'GCM Bad response code ' + code);
     } else {
     	try {
+            if (data && data[0] === '"' && data[data.length - 1] === '"') {
+                data = data.substr(1, data.length - 2);
+                log.d('GCM replaced quotes: %j', data);
+            }
             var obj = JSON.parse(data);
             if (obj.failure === 0 && obj.canonical_ids === 0) {
                 // this.emit(EVENTS.MESSAGE, noteMessageId(note), noteDevice(note).length);
             } else if (obj.results) {
-            	var resend = [], devicesWithInvalidTokens = [], devicesWithBadCredentials = [], validDevices = [], i, device, oldDevices = this.noteDevice(note);
+            	var resend = [], devicesWithInvalidTokens = [], devicesWithBadCredentials = [], validDevices = [], i, device, oldDevices = devices;
 
                 for (i in obj.results) {
                     var result = obj.results[i];
@@ -75,7 +82,8 @@ GCM.prototype.onRequestDone = function(response, note, devices, data) {
                     } else if (result.error === 'Unavailable' || result.error === 'InternalServerError') {
                     	resend.push(device);
                     } else if (result.error === 'MismatchSenderId') {
-                    	devicesWithBadCredentials.push(device);
+                        devicesWithInvalidTokens.push({bad: device});
+                    	// devicesWithBadCredentials.push(device);
                     } else if (result.error === 'NotRegistered' || result.error === 'InvalidRegistration') {
                     	devicesWithInvalidTokens.push({bad: device});
                     } else if (result.error) {
@@ -101,6 +109,7 @@ GCM.prototype.onRequestDone = function(response, note, devices, data) {
             }
 			this.serviceImmediate();
     	} catch (e) {
+            log.w('Bad response from GCM: %j / %j / %j', code, data, e);
 			this.handlerr(note, Err.CONNECTION, e, this.noteMessageId(note));
     	}
 	}
@@ -125,6 +134,7 @@ GCM.prototype.request = function(note) {
 		path: '/gcm/send',
 		method: 'POST',
         headers: {
+            'Accept': 'application/json',
             'Content-Type': 'application/json',
             'Content-length': Buffer.byteLength(content, 'utf8'),
             'Authorization': 'key=' + this.options.key,
@@ -138,6 +148,7 @@ GCM.prototype.request = function(note) {
 
 	options.agent = this.agent;
 
+    this.requesting = true;
 	var req = https.request(options, (res) => {
         var data = '';
         res.on('data', d => {
@@ -148,6 +159,7 @@ GCM.prototype.request = function(note) {
             if (!res.done) {
                 res.done = true;
                 this.onRequestDone(res, note, devices, data);
+                this.requesting = false;
             }
         });
         res.on('close', () => {
@@ -155,6 +167,7 @@ GCM.prototype.request = function(note) {
             if (!res.done) {
                 res.done = true;
                 this.onRequestDone(res, note, devices, data);
+                this.requesting = false;
             }
         });
     });
@@ -163,6 +176,10 @@ GCM.prototype.request = function(note) {
     req.end(content);
 
 	return req;
+};
+
+GCM.prototype.canMakeRequest = function () {
+    return !this.requesting;
 };
 
 GCM.prototype.add = function (device, content, messageId) {

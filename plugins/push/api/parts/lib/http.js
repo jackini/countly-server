@@ -65,12 +65,13 @@ HTTP.prototype.service = function() {
 		return log.d('Freeing event loop, %dms is more than %d', this.loopSmoother.value, this.options.eventLoopDelayToThrottleDown);
 	}
 	this.throttledDown = false;
-	if (this.notifications.length && this.notesInFlight < this.options.maxRequestsInFlight) {
+	if (this.notifications.length && this.notesInFlight < this.options.maxRequestsInFlight && this.canMakeRequest()) {
 		var notification = this.notifications.shift(), merged = 1;
 		// log.d('Notification 1 %j', notification);
 		if (typeof noteDevice(notification)[0] === 'string') {
 			notification[0] = [notification[0]];
 		}
+		notification[0] = notification[0].slice(0);
 		// log.d('Notification 2 %j', notification);
 		while (this.notifications.length > 0 && merged < this.currentTransmitAtOnce && (merged + this.notesInFlight) < this.options.maxRequestsInFlight) {
 			var next = this.notifications.shift();
@@ -136,6 +137,13 @@ HTTP.prototype.onRequestDone = function(/*note, code, data*/) {
  */
 HTTP.prototype.request = function(/*note, callback*/) {
 	throw new Error('request() must be overridden');
+};
+
+/**
+ * @private
+ */
+HTTP.prototype.canMakeRequest = function() {
+	return true;
 };
 
 HTTP.prototype.onRequestSocket = function(note, socket) {
