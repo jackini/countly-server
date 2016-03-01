@@ -1,4 +1,4 @@
-#Countly [![Build Status](https://api.travis-ci.org/Countly/countly-server.png?branch=master)](https://travis-ci.org/Countly/countly-server) 
+#Countly [![Build Status](https://api.travis-ci.org/Countly/countly-server.png?branch=master)](https://travis-ci.org/Countly/countly-server) [![Install Countly on DigitalOcean](http://do.count.ly/button.svg?v2)](http://do.count.ly)
 
 **We're hiring:** Countly is looking for full stack node.js developers to work on its core platform. [Click this link for job description](https://count.ly/full-stack-node-js-developer/)
 
@@ -59,5 +59,6 @@ And, if you liked Countly, [why not use one of our badges](https://count.ly/bran
 * [Countly web page](http://count.ly)
 * [Countly support](http://support.count.ly)
 * [Documentation & API reference guide](http://resources.count.ly)
-* [Countly Enterprise & Cloud Edition](https://count.ly/compare)
+* [Comparison of Countly editions](https://count.ly/compare)
+* [White labeling & rebranding options](https://count.ly/whitelabel-analytics/)
 * [Extended features of Countly Enterprise Edition](https://count.ly/enterprise-edition-features), including crash reports, referral analytics, user profiles, geolocations with push, detailed segmentation, funnels, real-time dashboard and more.
