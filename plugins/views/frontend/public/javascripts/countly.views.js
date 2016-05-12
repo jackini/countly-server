@@ -58,9 +58,11 @@ window.ViewsView = countlyView.extend({
                 { "mData": "b", sType:"formatted-num", "mRender":function(d) { return countlyCommon.formatNumber(d); }, "sTitle": jQuery.i18n.map["views.bounces"] }
             ];
             
-            if(typeof addDrill != "undefined" && countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID].type == "web"){
-                addDrill("up.lv");
-                columns.push({ "mData": function(row, type){return '<a href="#/analytics/views/action-map/'+row.views+'" class="icon-button green btn-header btn-view-map" data-localize="views.table.view" style="margin:0px; padding:2px;">View</a>';}, sType:"string", "sTitle": jQuery.i18n.map["views.action-map"], "sClass":"shrink center"  });
+            if(typeof addDrill != "undefined"){
+                $(".widget-header .left .title").after(addDrill("up.lv"));
+                if(countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID].type == "web"){
+                    columns.push({ "mData": function(row, type){return '<a href="#/analytics/views/action-map/'+row.views+'" class="icon-button green btn-header btn-view-map" data-localize="views.table.view" style="margin:0px; padding:2px;">View</a>';}, sType:"string", "sTitle": jQuery.i18n.map["views.action-map"], "sClass":"shrink center"  });
+                }
             }
 
             this.dtable = $('.d-table').dataTable($.extend({}, $.fn.dataTable.defaults, {
@@ -282,16 +284,21 @@ window.ActionMapView = countlyView.extend({
     loadIframe: function(){
         var self = this;
         var segments = countlyViews.getActionsData().domains;
-        var url = "http://"+segments[self.curSegment]+self.view;
+        var url = location.protocol+"//"+segments[self.curSegment]+self.view;
+        if($("#view_loaded_url").val().length == 0)
+            $("#view_loaded_url").val(url);
         countlyViews.testUrl(url, function(result){
-            if(result)
-                $("#view-map iframe").attr("src", url);
+            if(result){
+                $("#view-map iframe").attr("src", "/o/urlredir?url="+encodeURIComponent(url));
+                $("#view_loaded_url").val(url);
+            }
             else{
                 self.curSegment++;
                 if(segments[self.curSegment]){
                     self.loadIframe();
                 }
                 else{
+                    $("#view_loaded_url").show();
                     CountlyHelpers.alert(jQuery.i18n.map["views.cannot-load"], "red");
                 }
             }
@@ -326,6 +333,16 @@ window.ActionMapView = countlyView.extend({
             app.localize();
             $('.btn-back-view').off('click').on('click', function(){
                 window.location.hash = "/analytics/views";
+            });
+            
+            $("#view_reload_url").on("click", function () {
+				$("#view-map iframe").attr("src", "/o/urlredir?url="+encodeURIComponent($("#view_loaded_url").val()));
+			});
+            
+            $("#view_loaded_url").keyup(function(event){
+                if(event.keyCode == 13){
+                    $("#view_reload_url").click();
+                }
             });
             
             $("#action-map-type .segmentation-option").on("click", function () {
@@ -370,11 +387,13 @@ window.ActionMapView = countlyView.extend({
             }
             self.renderCommon(true);
             var data = countlyViews.getActionsData();
-            self.map.clear();
-            self.map.data(self.getData(data.data));
-            var r = Math.max((48500-35*data.data.length)/900, 5);
-            self.map.radius(r, r*1.6);
-            self.map.draw();
+            if(self.map){
+                self.map.clear();
+                self.map.data(self.getData(data.data));
+                var r = Math.max((48500-35*data.data.length)/900, 5);
+                self.map.radius(r, r*1.6);
+                self.map.draw();
+            }
         });
     }
 });

@@ -19,12 +19,6 @@ window.MessagingDashboardView = countlyView.extend({
             pushSummary = countlyPushEvents.getDashSummary(),
             templateData = {};
 
-        templateData["page-title"] = countlyCommon.getDateRange();
-        templateData["logo-class"] = "sessions";
-        templateData["push_short"] = countlyPush.getMessagesForCurrApp();
-
-        templateData["big-numbers"] = pushSummary;
-
         var secondary = [sessionData.usage['total-users'], sessionData.usage['messaging-users']];
         secondary[0].title = jQuery.i18n.map["common.total-users"];
         secondary[0].id = "draw-total-users";
@@ -49,6 +43,13 @@ window.MessagingDashboardView = countlyView.extend({
         }
         delivery = delivery ? sent === 0 ? 100 : Math.round(100 * delivery / sent) : 0;
         action = action ? sent === 0 ? 100 :  Math.round(100 * action / sent) : 0;
+
+        templateData["page-title"] = countlyCommon.getDateRange();
+        templateData["logo-class"] = "sessions";
+        templateData["push_short"] = countlyPush.getMessagesForCurrApp();
+
+        templateData["big-numbers"] = pushSummary;
+
         templateData["big-numbers-intermediate"] = [
             {
                 percentage: enabling + '%',
@@ -66,7 +67,18 @@ window.MessagingDashboardView = countlyView.extend({
 
         this.templateData = templateData;
 
+        if (isRefresh) {
+            newPage = $("<div>" + this.template(this.templateData) + "</div>");
+            $(this.el).find("#big-numbers-container").replaceWith(newPage.find("#big-numbers-container"));
+            $(this.el).find("#intermediate-numbers-container").replaceWith(newPage.find("#intermediate-numbers-container"));
+
+            // $('.widget-intermediate .big-numbers').eq(0).find('.percentage').text(enabling + '%');
+            // $('.widget-intermediate .big-numbers').eq(1).find('.percentage').text(delivery + '%');
+            // $('.widget-intermediate .big-numbers').eq(2).find('.percentage').text(action + '%');
+        } else {
         $(this.el).html(this.template(this.templateData));
+        }
+
         countlyCommon.drawTimeGraph(pushDP.chartDP, "#dashboard-graph");
         countlyCommon.drawTimeGraph(messUserDP.chartDP, "#dashboard-graph-secondary");
 
@@ -162,12 +174,15 @@ window.MessagingListView = countlyView.extend({
                 'logo-class': 'logo',
                 'page-title': jQuery.i18n.map["push.page-title"]
             }));
+            this.renderTable();
         }
 
-        this.renderTable();
-
         if (isRefresh) {
+            var pushes = countlyPush.getAllMessages();
+            CountlyHelpers.refreshTable(this.dtable, pushes);
             CountlyHelpers.setUpDateSelectors(this);
+            $('#date-to').datepicker('option', 'maxDate', null);
+
             app.localize();
         }
     },
@@ -235,14 +250,15 @@ var PushPopup = function(message, duplicate, dontReplaceApp) {
             date: message.date,
             sent: message.sent,
             result: message.result,
-            conditions: message.conditions === '{}' ? undefined : (typeof message.conditions === 'string' ? JSON.parse(message.conditions) : message.conditions),
+            userConditions: message.userConditions === '{}' ? undefined : (typeof message.userConditions === 'string' ? JSON.parse(message.userConditions) : message.userConditions),
+            drillConditions: message.drillConditions === '{}' ? undefined : (typeof message.drillConditions === 'string' ? JSON.parse(message.drillConditions) : message.drillConditions),
             geo: typeof message.geo === 'undefined' ? undefined : ((typeof message.geo === 'string' && message.geo) ? message.geo : undefined),
             noTests: false,
             noApps: false,
             noPlatforms: false
         }
         for (var i in message.apps) for (var a in allApps) if (allApps[a]._id === message.apps[i]) message.appNames.push(allApps[a].name);
-        if (message.conditions && message.conditions._id) {
+        if (message.userConditions && message.userConditions._id) {
             message.noTests = true;
             message.noApps = true;
             message.noPlatforms = true;
@@ -945,7 +961,7 @@ var PushPopup = function(message, duplicate, dontReplaceApp) {
             }
             count.text('');
             countlyPush.getAudience(
-                {apps: message.apps, platforms: message.platforms, test: message.test, conditions: message.conditions, geo: message.geo || undefined},
+                {apps: message.apps, platforms: message.platforms, test: message.test, userConditions: message.userConditions, drillConditions: message.drillConditions, geo: message.geo || undefined},
                 function(resp) {
                     message.count = resp;
 
@@ -1113,7 +1129,8 @@ var PushPopup = function(message, duplicate, dontReplaceApp) {
             category: message.type === 'category' ? content.find('.push-category').val() : '',
             locales: message.usedLocales,
             date: content.find('.send-later:checked').length ? content.find('.send-later-date').data('timestamp') : null,
-            conditions: message.conditions,
+            userConditions: message.userConditions,
+            drillConditions: message.drillConditions,
             geo: message.geo
         };
 
@@ -1124,7 +1141,8 @@ var PushPopup = function(message, duplicate, dontReplaceApp) {
         if (json.category  === '') delete json.category;
         if (!json.update) delete json.update;
         if (!json.review) delete json.review;
-        if (!json.conditions) delete json.conditions;
+        if (!json.userConditions) delete json.userConditions;
+        if (!json.drillConditions) delete json.drillConditions;
         if (!json.geo) delete json.geo;
         if (json.data) json.data = toJSON(json.data);
 
@@ -1166,8 +1184,7 @@ function pushAppMgmt(appId){
     var gcm = countlyGlobal['apps'][appId].gcm = countlyGlobal['apps'][appId].gcm || {};
 
     //app was changed
-    $(".app-container:not(#app-container-new)").live("click", function () {
-        appId = $(this).data("id");
+    app.addAppManagementSwitchCallback(function(appId, type){
         apn = countlyGlobal['apps'][appId].apn = countlyGlobal['apps'][appId].apn || {};
         gcm = countlyGlobal['apps'][appId].gcm = countlyGlobal['apps'][appId].gcm || {};
         $("#push-apn-cert-uni-view").removeClass('fa fa-remove').removeClass('fa fa-check').addClass(apn.universal ? 'fa fa-check' : 'fa fa-remove');
@@ -1309,7 +1326,7 @@ app.addAppManagementSwitchCallback(function(appId, type){
     }
 });
 
-app.addPageScript("/drill", function(){
+app.addPageScript("/drill#", function(){
     if(countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID].type == "mobile"){
         $("#bookmark-filter").after(
         '<div id="create-message-connector" style="display:none; float:left; height:1px; border-top:1px solid #999; width:50px; margin-top:14px; margin-left:5px;"></div>'+
@@ -1320,12 +1337,12 @@ app.addPageScript("/drill", function(){
             var message = {
                 apps: [countlyCommon.ACTIVE_APP_ID],
                 platforms: [],
-                conditions: {}
+                drillConditions: countlySegmentation.getRequestData()
             };
     
-            for (var k in filterData.dbFilter) {
-                if (k.indexOf('up.') === 0) message.conditions[k.substr(3).replace("cmp_","cmp.")] = filterData.dbFilter[k];
-            }
+            // for (var k in filterData.dbFilter) {
+            //     if (k.indexOf('up.') === 0) message.conditions[k.substr(3).replace("cmp_","cmp.")] = filterData.dbFilter[k];
+            // }
     
             PushPopup(message, false, true);
         });
@@ -1335,12 +1352,12 @@ app.addPageScript("/drill", function(){
             var message = {
                 apps: [countlyCommon.ACTIVE_APP_ID],
                 platforms: [],
-                conditions: {}
+                drillConditions: filter
             };
     
-            for (var k in filter) {
-                if (k.indexOf('up.') === 0) message.conditions[k.substr(3).replace("cmp_","cmp.")] = filter[k];
-            }
+            // for (var k in filter) {
+            //     if (k.indexOf('up.') === 0) message.conditions[k.substr(3).replace("cmp_","cmp.")] = filter[k];
+            // }
     
             PushPopup(message, false, true);
         });
@@ -1370,7 +1387,7 @@ app.addPageScript("/users#", function(){
                         platforms: platforms,
                         apps: [countlyCommon.ACTIVE_APP_ID],
                         test: test && !prod,
-                        conditions: {_id: app.userdetailsView.user_id}
+                        userConditions: {_id: app.userdetailsView.user_id}
                     }, true, true);
                 } else {
                     CountlyHelpers.alert(jQuery.i18n.map["push.no-user-token"], "red");
@@ -1399,7 +1416,7 @@ app.addPageScript("/users#", function(){
                 var message = {
                     apps: [countlyCommon.ACTIVE_APP_ID],
                     platforms: [],
-                    conditions: filterData
+                    userConditions: filterData
                 };
                 
                 PushPopup(message, false, true);
@@ -1425,7 +1442,7 @@ $( document ).ready(function() {
     });
 
     var menu = '<a class="item messaging" id="sidebar-messaging">'+
-        '<div class="logo logo-icon fa fa-envelope-square" style="font-size: 28px;"></div>'+
+        '<div class="logo ion-chatbox-working"></div>'+
         '<div class="text" data-localize="push.sidebar.section">Messaging</div>'+
     '</a>'+
     '<div class="sidebar-submenu" id="messaging-submenu">'+

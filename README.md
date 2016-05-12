@@ -1,6 +1,6 @@
 #Countly [![Build Status](https://api.travis-ci.org/Countly/countly-server.png?branch=master)](https://travis-ci.org/Countly/countly-server) [![Install Countly on DigitalOcean](http://do.count.ly/button.svg?v2)](http://do.count.ly)
 
-**We're hiring:** Countly is looking for full stack node.js developers to work on its core platform. [Click this link for job description](https://count.ly/full-stack-node-js-developer/)
+**We're hiring:** Countly is looking for full stack node.js developers (from China and world, for remote work) to develop on  Countly platform. [Click this link for job description](https://count.ly/full-stack-node-js-developer/)
 
 **Are you a plugin developer?** [Contact us](http://count.ly/contact-us) if you like to work / working on a specific [plugin](http://count.ly/plugins) and we can discuss details on how we can work together in a lively environment!
 
@@ -19,15 +19,23 @@ There are two parts of Countly: the server that collects and analyzes data, and 
 
 ##Installing & upgrading Countly server
 
-All public Community Edition versions are [available from Github](https://github.com/Countly/countly-server/releases). We provide a beautiful installation sript (`bin/countly.install.sh`) with countly-server package that installs and configures everything required to run Countly Server.
+There are several ways to install Countly: 
+
+1. The following command will download and install Countly on your **Ubuntu** or **CentOS** server. 
+
+    wget -qO- http://c.ly/install | bash
+
+2. If you have a Digital Ocean account, [click here and install on Digital Ocean](http://do.count.ly) with a single click.
+
+3. For bash lovers, we provide a beautiful installation sript (`bin/countly.install.sh`) in countly-server package which installs everything required to run Countly Server. For this, you need a stable release of this repository [available here](https://github.com/Countly/countly-server/releases). 
+
+4. Countly also has Docker support - [see our official Docker repository](https://registry.hub.docker.com/u/countly/countly-server/) and [installation instructions for Docker](http://resources.count.ly/docs/installing-countly-server)
 
 If you want to upgrade Countly from a previous version, please take a look at [upgrading documentation](resources.count.ly/v1.0/docs/upgrading-countly-server).
 
-Countly also has Docker support - [see our official Docker repository](https://registry.hub.docker.com/u/countly/countly-server/) and [installation instructions for Docker](http://resources.count.ly/docs/installing-countly-server)
-
 ##Dependencies
 
-We develop and test Countly on Ubuntu with MongoDB, Node.js and Nginx. Installation script only needs a clean, decent Ubuntu Linux without any services listening to port 80 and takes care of every library and software (e.g MongoDB, Nginx, Node.js, Expressjs etc) required to be installed on Ubuntu Linux. 
+We develop and test Countly on Ubuntu with MongoDB, Node.js and Nginx. Installation script only needs a clean, decent Ubuntu Linux without any services listening to port 80 and takes care of every library and software required to be installed on Ubuntu Linux. 
 
 ##API & Frontend
 

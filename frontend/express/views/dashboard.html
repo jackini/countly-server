@@ -14,6 +14,8 @@
 	<link rel="icon" type="image/png" href="<%- cdn %>images/favicon.png">
     <link rel="stylesheet" href="<%- cdn %>stylesheets/font-awesome/css/font-awesome.min.css" />
 	<link rel="stylesheet" href="<%- cdn %>stylesheets/entypo/css/entypo.css" />
+    <link rel="stylesheet" href="<%- cdn %>stylesheets/ionicons/css/ionicons.min.css" />
+    <link rel="stylesheet" href="<%- cdn %>stylesheets/material/material-icons.css" />
 	<link rel="stylesheet" href="<%- cdn %>javascripts/dom/jqueryui/jquery.ui.base.css" />
 	<link rel="stylesheet" href="<%- cdn %>javascripts/dom/jqueryui/jquery.ui.theme.css" />
     <% if (production) { %>
@@ -56,6 +58,7 @@
 	    <script language="javascript" type="text/javascript" src="<%- cdn %>javascripts/utils/initialAvatar.js"></script>
 		<script language="javascript" type="text/javascript" src="<%- cdn %>javascripts/utils/jquery.amaran.min.js"></script>
 		<script language="javascript" type="text/javascript" src="<%- cdn %>javascripts/utils/jquery.titlealert.js"></script>
+        <script language="javascript" type="text/javascript" src="<%- cdn %>javascripts/utils/jquery.hoverIntent.minified.js"></script>
 	    <script language="javascript" type="text/javascript" src="<%- cdn %>javascripts/dom/dataTables/js/jquery.dataTables.js"></script>
 	    <script language="javascript" type="text/javascript" src="<%- cdn %>javascripts/dom/dataTables/js/ZeroClipboard.js"></script>
 	    <script language="javascript" type="text/javascript" src="<%- cdn %>javascripts/dom/dataTables/js/TableTools.js"></script>
@@ -81,29 +84,29 @@
 		</div>
 		<div id="sidebar-menu">
             <div id="default-type" class="sidebar-menu" style="display: none;">
-                <a href="#/" class="item analytics active">
-                    <div class="logo dashboard"></div>
+                <a href="#/" class="item analytics">
+                    <div class="logo dashboard ion-speedometer"></div>
                     <div class="text" data-localize="sidebar.dashboard"></div>
                 </a>
                 <a class="item analytics" id="analytics-menu">
-                    <div class="logo analytics"></div>
+                    <div class="logo analytics ion-ios-pulse-strong"></div>
                     <div class="text" data-localize="sidebar.analytics"></div>
                 </a>
                 <div class="sidebar-submenu" id="analytics-submenu">
                 </div>
                 <a class="item analytics" id="engagement-menu" style="display:none;">
-                    <div class="logo fa fa-magnet" style="background-image:none; font-size:28px; text-align:center; width:35px; margin-left:14px; line-height:42px;"></div>
+                    <div class="logo ion-happy-outline"></div>
                     <div class="text" data-localize="sidebar.engagement"></div>
                 </a>
                 <div class="sidebar-submenu" id="engagement-submenu">
                 </div>
                 <a href="#/analytics/events" class="item analytics" id="sidebar-events">
-                    <div class="logo events"></div>
+                    <div class="logo events ion-network"></div>
                     <div class="text" data-localize="sidebar.events"></div>
                 </a>	
                 <% if(member['global_admin'] || adminOfApps.length  || config.autonomous) { %>
                 <a class="item" id="management-menu">
-                    <div class="logo management"></div>
+                    <div class="logo management ion-gear-a"></div>
                     <div class="text" data-localize="sidebar.management"></div>
                 </a>
                 <div class="sidebar-submenu" id="management-submenu">
@@ -111,13 +114,13 @@
                         <div class="logo applications"></div>
                         <div class="text" data-localize="sidebar.management.applications"></div>
                     </a>
-                    <% if(member['global_admin'] || config.createUsers) { %>
+                    <% if(member['global_admin']) { %>
                     <a href="#/manage/users" class="item">
                         <div class="logo mgmt-users"></div>
                         <div class="text" data-localize="sidebar.management.users"></div>
                     </a>
                     <% } %>
-                    <a class="item help-toggle disabled">
+                    <a class="item help-toggle">
                         <div class="logo help"></div>
                         <div class="text" data-localize="sidebar.management.help"></div>
                         <div id="help-toggle"></div>
@@ -128,7 +131,6 @@
 		</div>
 		<div id="sidebar-bottom-container">
 			<div class="menu">
-				<a id="sidebar-countly-version"><%- countlyTitle %> <%= countlyVersion %></a>
 				<a class="item" id="account-settings" data-localize="sidebar.settings"></a>
 				<a class="item" id="user-logout" href="<%= path %>/logout" data-localize="sidebar.logout"></a>
 			</div>
@@ -155,7 +157,7 @@
 			<div class="username" id="menu-username"><%= member['username'] %></div>
 			<input id="user-api-key" type="hidden" value="<%= member['api_key'] %>" />
 			<div class="reveal-language-menu">EN</div>
-			<div class="reveal-menu"></div>
+			<div class="reveal-menu"><i class="ion-gear-a"></i></div>
 		</div>
 	</div>
     <div id="app-tooltip"></div>
@@ -234,7 +236,7 @@
 			</div>
 			<div style="margin-top:15px;">
 				<div class="title" data-localize="user-settings.api-key"></div>
-				<div class="input"><input id="api-key" type="text" readonly="readonly" value=""/></div>
+				<div class="input"><input id="api-key" type="text" value=""/></div>
 			</div>
 		</div>
 		<div class="buttons">
@@ -424,7 +426,7 @@
 			<div class="widget-footer" style="background-color:#EEEEEE;">
 				<div id="big-numbers-container">
 					{{#each big-numbers.items}}
-					<div class="big-numbers three-column help-zone-vs" data-help-localize="help.{{this.help}}">
+					<div class="big-numbers {{#if ../../big-numbers.class}}{{../../big-numbers.class}}{{else}}three-column{{/if}} help-zone-vs" data-help-localize="help.{{this.help}}">
 						<div class="inner">
 							<div class="select">{{this.title}}</div>
 							<div class="color"></div>
@@ -438,7 +440,7 @@
 			{{/if}}
 		</div>
 		{{#if bars}}
-		<div class="dashboard-summary three">
+		<div class="dashboard-summary {{#if bars-class}}{{bars-class}}{{else}}three{{/if}}">
 			{{#each bars}}
 			<div class="item help-zone-vs" data-help-localize="help.{{this.help}}">
 				<div class="inner">
@@ -470,10 +472,11 @@
 				<div class="title" style="letter-spacing:-1px; font-size:19px; margin-top:10px; margin-left:5px;">{{toUpperCase page-title}}</div>
 				{{> date-selector }}
 			</div>
+            {{#if usage}}
 			<div class="widget-content" style="border:none;">
 				<div id="big-numbers-container" class="dashboard">
 					{{#each usage}}
-					<div class="big-numbers six-column help-zone-vs" data-help-localize="help.{{this.help}}">
+					<div class="big-numbers {{#if ../../usage-class}}{{../../usage-class}}{{else}}six-column{{/if}} help-zone-vs" data-help-localize="help.{{this.help}}">
 						<div class="inner">
 							<div class="select" id="{{this.id}}">
 								<div class="title">{{this.title}}</div>
@@ -484,6 +487,7 @@
 					{{/each}}
 				</div>
 			</div>
+            {{/if}}
 			<div class="widget-footer" style="height:220px; padding-top:20px; padding-bottom:10px; overflow:visible; box-shadow:none; position:relative;">
                 <div id="graph-note">
                     <div class="main">
@@ -508,11 +512,11 @@
 					<div class="title">{{page-title}}</div>
 				</div>
 				{{> date-selector }}
+                <div class="right">
+                    <a id='country-toggle' class='icon-button light' style='margin-top:5px;'></a>
+                </div>
 			</div>
 			<div class="widget-content geo-switch help-zone-vb" data-help-localize="help.{{{chart-helper}}}" style="height:495px; background-color:#FFF;">
-				<div style="position:absolute; top:20px; right:20px; z-index:1;">
-					<a id="toggle-map" class="icon-button light"></a>
-				</div>
                 <div class="cly-button-group over">
                     <div id="map-list-sessions" style="padding: 6px 8px 7px 8px;" class="icon-button light active" data-localize="sidebar.analytics.sessions"></div>
                     <div id="map-list-users" style="padding: 6px 8px 7px 8px;" class="icon-button light" data-localize="sidebar.analytics.users"></div>
@@ -521,9 +525,10 @@
 				<div id="geo-chart-outer"><div><div id="geo-chart"></div></div></div>
 			</div>
 			<div class="widget-footer" style="background-color:#EEEEEE;">
+                {{#if big-numbers}}
 				<div id="big-numbers-container">
 					{{#each big-numbers.items}}
-					<div class="big-numbers three-column help-zone-vs" data-help-localize="help.{{this.help}}">
+					<div class="big-numbers {{#if ../../big-numbers.class}}{{../../big-numbers.class}}{{else}}three-column{{/if}} help-zone-vs" data-help-localize="help.{{this.help}}">
 						<div class="inner">
 							<div class="select">{{this.title}}</div>
 							<div class="number" style="margin-top: 10px;">{{getFormattedNumber this.total}}</div>
@@ -532,6 +537,7 @@
 					</div>
 					{{/each}}
 				</div>
+                {{/if}} 
 			</div>
 		</div>
 		<table class="d-table help-zone-vb" cellpadding="0" cellspacing="0" data-help-localize="help.{{{table-helper}}}"></table>
@@ -550,7 +556,7 @@
 				</div>
 				<% } %>
 			</div>
-			<div class="scrollable">
+			<div id="management-app-container" class="scrollable">
 				{{#eachOfObjectValue admin_apps}}
 				<div class="app-container" data-key="{{this.key}}" data-id="{{this._id}}">
 					<div class="logo" style="background-image: url('<%- cdn %>appimages/{{this._id}}.png');"></div>
@@ -599,9 +605,10 @@
 											</div>
 										</div>
 									</div>
-								</td>
+                                    <div class="hint" data-localize="management-applications.type.hint"></div>
+                                </td>
 							</tr>
-							<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-category">
+							<!--<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-category">
 								<td data-localize="management-applications.category"></td>
 								<td>
 									<div class="cly-select" style="width:280px;">
@@ -618,38 +625,41 @@
 										</div>
 									</div>
 								</td>
-							</tr>
+							</tr>-->
 							<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-timezone">
 								<td data-localize="management-applications.time-zone"></td>
 								<td id="app-add-timezone" >
-									<div style="float:left;">
-										<div id="country-select" class="cly-select" style="width:280px;">
-											<div class="select-inner">
-												<div class="text-container">
-													<div class="text"></div>
-												</div>
-												<div class="right combo"></div>
-											</div>
-											<div class="select-items square" style="width:280px;">
-												<div id="country-items"></div>
-											</div>
-										</div>
-										<div id="timezone-select" class="cly-select" style="width:200px; display:none;">
-											<div class="select-inner">
-												<div class="text-container">
-													<div class="text"></div>
-												</div>
-												<div class="right combo"></div>
-											</div>
-											<div class="select-items square" style="width:200px;">
-												<div id="timezone-items"></div>
-											</div>
-										</div>
-									</div>
-									<div id="selected" style="float:left; font-size:14px; padding:5px 10px; padding-top:6px; color:#666; font-family:'Ubuntu';"></div>
-									<input type="hidden" value="" id="app-timezone"/>
-									<input type="hidden" value="" id="app-country"/>
-								</td>
+                                    <div>
+                                        <div style="float:left;">
+                                            <div id="country-select" class="cly-select" style="width:280px;">
+                                                <div class="select-inner">
+                                                    <div class="text-container">
+                                                        <div class="text"></div>
+                                                    </div>
+                                                    <div class="right combo"></div>
+                                                </div>
+                                                <div class="select-items square" style="width:280px;">
+                                                    <div id="country-items"></div>
+                                                </div>
+                                            </div>
+                                            <div id="timezone-select" class="cly-select" style="width:200px; display:none;">
+                                                <div class="select-inner">
+                                                    <div class="text-container">
+                                                        <div class="text"></div>
+                                                    </div>
+                                                    <div class="right combo"></div>
+                                                </div>
+                                                <div class="select-items square" style="width:200px;">
+                                                    <div id="timezone-items"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="selected" style="float:left; font-size:14px; padding:5px 10px; padding-top:6px; color:#666; font-family:'Ubuntu';"></div>
+                                        <input type="hidden" value="" id="app-timezone"/>
+                                        <input type="hidden" value="" id="app-country"/>
+                                    </div>
+                                    <div class="hint" data-localize="management-applications.time-zone.hint"></div>
+                                </td>
 							</tr>
                             <tr class="help-zone-vs" data-help-localize="help.manage-apps.app-icon">
 								<td data-localize="management-applications.icon"></td>
@@ -702,10 +712,6 @@
 					<input type="hidden" id="app-edit-id"/>
 					<table class="d-table horizontal" cellpadding="0" cellspacing="0">
 						<tbody>
-                            <tr class="help-zone-vs" data-help-localize="help.manage-apps.app-id">
-                                <td data-localize="management-applications.app-id"></td>
-                                <td id="view-app-id"></td>
-                            </tr>
 							<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-name">
 								<td data-localize="management-applications.application-name"></td>
 								<td id="app-edit-name">
@@ -736,9 +742,10 @@
 											</div>
 										</div>
 									</div>
+                                    <div class="hint" data-localize="management-applications.type.hint"></div>
 								</td>
 							</tr>
-							<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-category">
+							<!--<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-category">
 								<td data-localize="management-applications.category"></td>
 								<td id="app-edit-category">
 									<div class="read"></div>
@@ -758,10 +765,16 @@
 										</div>
 									</div>
 								</td>
-							</tr>
+							</tr>-->
 							<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-key">
 								<td data-localize="management-applications.app-key"></td>
-								<td id="view-app-key"></td>
+								<td id="app-edit-key">
+									<div class="read"></div>
+									<div class="edit">
+										<input type="text" value="">
+									</div>
+                                    <div class="hint" data-localize="management-applications.app-key.hint"></div>
+                                </td>
 							</tr>
 							<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-timezone">
 								<td data-localize="management-applications.time-zone"></td>
@@ -802,9 +815,10 @@
 										<input type="hidden" value="" id="app-timezone"/>
 										<input type="hidden" value="" id="app-country"/>
 									</div>
-								</td>
+                                    <div class="hint" data-localize="management-applications.time-zone.hint"></div>
+                                </td>
 							</tr>
-							<tr class="table-edit-prev help-zone-vs" data-help-localize="help.manage-apps.app-icon">
+							<tr class="help-zone-vs" data-help-localize="help.manage-apps.app-icon">
 								<td data-localize="management-applications.icon"></td>
 								<td id="app-edit-image">
 									<div class="read">
@@ -818,6 +832,13 @@
 									</div>
 								</td>
 							</tr>
+                            <tr class="help-zone-vs" data-help-localize="help.manage-apps.app-id">
+                                <td data-localize="management-applications.app-id"></td>
+                                <td>
+                                    <div id="view-app-id"></div>
+                                    <div class="hint" data-localize="management-applications.app-id.hint"></div>
+                                </td>
+                            </tr>
 							<tr class="table-edit">
 								<td colspan="2">
 									<a id="save-app-edit" class="icon-button light" data-localize="common.save-changes"></a>
@@ -827,10 +848,16 @@
 						</tbody>
 					</table>
 				</div>
-				<div style="float:right;">
-					<a target="blank" href="http://count.ly/resources/source/download-sdk" style="margin-right:14px;" class="icon-button light"><i class="fa fa-mobile-phone"></i> Countly SDKs</a>
-				</div>
 			</div>
+			</div>
+            <div id="code-countly" style="display: none;">
+                <div id="code-countly-logo"></div>
+                <div id="code-countly-content">
+                    <h3 data-localize="common.integrate-sdks"></h3>
+                    <p data-localize="common.integrate-sdks-text"></p>
+                    <p class="select-platforms" data-localize="common.integrate-sdks-platforms"></p>
+                    <div class="sdks"></div>
+                </div>
 			</div>
 			<div id="no-app-warning" class="alert danger" data-localize="management-applications.no-app-warning"></div>
 			<div id="first-app-success" class="alert success" data-localize="management-applications.first-app-message2"></div>
@@ -993,11 +1020,16 @@
 				{{> date-selector }}
 			</div>
 			<div class="widget-content" style="border:none;">
+                {{#if usage}}
 				<div id="big-numbers-container" class="dashboard">
 					{{#each usage}}
-					<div class="big-numbers six-column help-zone-vs" data-help-localize="help.{{this.help}}">
+					<div class="big-numbers top {{#if ../../usage-class}}{{../../usage-class}}{{else}}six-column{{/if}} help-zone-vs" data-help-localize="help.{{this.help}}">
 						<div class="inner">
-							<div class="logo"></div>
+                            <div class="logo {{#if this.ion-icon}} ion {{this.ion-icon}} {{/if}} {{#if this.material-icon}} material {{/if}}">
+                                {{#if this.material-icon}}
+                                <i class="material-icons">{{this.material-icon}}</i>
+                                {{/if}}
+                            </div>
 							<div class="number">
                                 <span class="value">{{getShortNumber this.data.total}}</span>
                                 {{#if this.data.isEstimate}}
@@ -1010,18 +1042,30 @@
                                     </div>
                                 {{/if}}
                             </div>
-							<div class="trend" style="background-image:url('../images/dashboard/{{this.data.trend}}trend.png');">
-								<div class="change">{{this.data.change}}</div>
-							</div>
+                            <div class="title">{{this.title}}</div>
+                            <div class="trend {{this.data.trend}}">
+                                {{#ifCond this.data.change "==" "NA"}}
+                                <i class="material-icons">trending_flat</i>
+                                {{else}}
+                                {{#ifCond this.data.change "==" "0%"}}
+                                <i class="material-icons">trending_flat</i>
+                                {{else}}
+                                    {{#ifCond this.data.trend "==" "u"}}
+                                        <i class="material-icons">trending_up</i>
+                                    {{else}}
+                                        <i class="material-icons">trending_down</i>
+                                    {{/ifCond}}
+                                {{/ifCond}}
+                                {{/ifCond}}
+                                <div class="change">{{this.data.change}}</div>
+                            </div>
 							<div class="spark"><span class="{{this.data.trend}}sparkline">{{this.data.sparkline}}</span></div>
-							<div class="select" id="{{this.id}}">
-								<div class="title">{{this.title}}</div>
-							</div>
-							<div class="arrow"></div>
+                            <div class="select" id="{{this.id}}"></div>
 						</div>
 					</div>
 					{{/each}}
 				</div>
+                {{/if}}
 			</div>
 			<div class="widget-footer" style="height:220px; padding-top:20px; padding-bottom:10px; overflow:visible; box-shadow:none; position:relative;">
                 <div id="graph-note">

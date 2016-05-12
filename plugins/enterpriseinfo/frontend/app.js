@@ -1,5 +1,5 @@
 var plugin = {},
-	countlyConfig = require('../../../frontend/express/config'),
+	countlyConfig = require('../../../frontend/express/config', 'dont-enclose'),
 	versionInfo = require('../../../frontend/express/version.info'),
 	async = require('async');
 
@@ -39,6 +39,8 @@ var plugin = {},
 			} else {
 				countlyDb.collection('members').count({}, function (err, memberCount) {
 					if (memberCount) {
+                        if(req.query.message)
+                            req.flash('info', req.query.message);
 						res.render('../../../plugins/enterpriseinfo/frontend/public/templates/login', {"countlyTitle":versionInfo.title, "countlyPage":versionInfo.page, "message":req.flash('info'), "csrf":req.session._csrf, path:countlyConfig.path || "", cdn:countlyConfig.cdn || "" });
 					} else {
 						res.redirect(countlyConfig.path+'/setup');

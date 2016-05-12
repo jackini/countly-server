@@ -100,7 +100,7 @@ window.MobileDashboardView = countlyView.extend({
     },
     renderCommon:function (isRefresh, isDateChange) {
         var sessionData = countlySession.getSessionData(),
-            locationData = countlyLocation.getLocationData({maxCountries:7}),
+            locationData = countlyLocation.getLocationData({maxCountries:10}),
             sessionDP = countlySession.getSessionDPTotal();
 
         this.locationData = locationData;
@@ -108,36 +108,42 @@ window.MobileDashboardView = countlyView.extend({
         sessionData["usage"] = [
             {
                 "title":jQuery.i18n.map["common.total-sessions"],
+                "material-icon": "timeline",
                 "data":sessionData.usage['total-sessions'],
                 "id":"draw-total-sessions",
                 "help":"dashboard.total-sessions"
             },
             {
                 "title":jQuery.i18n.map["common.total-users"],
+                "ion-icon": "ion-person-stalker",
                 "data":sessionData.usage['total-users'],
                 "id":"draw-total-users",
                 "help":"dashboard.total-users"
             },
             {
                 "title":jQuery.i18n.map["common.new-users"],
+                "ion-icon": "ion-person-add",
                 "data":sessionData.usage['new-users'],
                 "id":"draw-new-users",
                 "help":"dashboard.new-users"
             },
             {
                 "title":jQuery.i18n.map["dashboard.time-spent"],
+                "ion-icon": "ion-android-time",
                 "data":sessionData.usage['total-duration'],
                 "id":"draw-total-time-spent",
                 "help":"dashboard.total-time-spent"
             },
             {
                 "title":jQuery.i18n.map["dashboard.avg-time-spent"],
+                "material-icon": "timelapse",
                 "data":sessionData.usage['avg-duration-per-session'],
                 "id":"draw-time-spent",
                 "help":"dashboard.avg-time-spent2"
             },
             {
                 "title":jQuery.i18n.map["dashboard.avg-reqs-received"],
+                "material-icon": "compare_arrows",
                 "data":sessionData.usage['avg-events'],
                 "id":"draw-avg-events-served",
                 "help":"dashboard.avg-reqs-received"
@@ -179,6 +185,9 @@ window.MobileDashboardView = countlyView.extend({
             if (!isDateChange) {
                 this.drawGraph();
             }
+        }
+        if(!countlyGlobal["config"].use_google){
+            this.countryTable(isRefresh);
         }
     },
     restart:function () {
@@ -263,6 +272,34 @@ window.MobileDashboardView = countlyView.extend({
             '</div>');
         }
     },
+    countryTable:function(refresh){
+        var self = this;
+        if(!refresh){
+            $(".map-list").after('<table id="countries-alternative" class="d-table help-zone-vb" cellpadding="0" cellspacing="0"></table>');
+            this.country_dtable = $('#countries-alternative').dataTable($.extend({}, $.fn.dataTable.defaults, {
+                "aaData": self.locationData,
+                "iDisplayLength": 10,
+                "aoColumns": [
+                        { "mData": "country_flag", "sType":"string", "sTitle": jQuery.i18n.map["countries.table.country"]},
+                        { "mData": "t", "sType":"numeric", "sTitle": jQuery.i18n.map["allapps.total-sessions"]},
+                        { "mData": "u", "sType":"numeric", "sTitle": jQuery.i18n.map["allapps.total-users"]},
+                        { "mData": "n", "sType":"numeric", "sTitle": jQuery.i18n.map["allapps.new-users"]},
+                        
+                    ]
+            }));
+            this.country_dtable.stickyTableHeaders();
+            this.country_dtable.fnSort( [ [1,'desc'] ] );
+            $("#countries-alternative_wrapper .dataTable-top .search-table-data").hide();
+            $("#countries-alternative_wrapper .dataTable-top .save-table-data").hide();
+            $("#countries-alternative_wrapper .dataTable-top .dataTables_paginate").hide();
+            $("#countries-alternative_wrapper .dataTable-top .DTTT_container").hide();
+            $("#countries-alternative_wrapper .dataTable-top").append("<div style='font:13px Ubuntu,Helvetica,sans-serif; color:#636363; text-shadow:0 1px #F6F6F6; margin-right:10px; padding: 10px; float: right;'><a href='#/analytics/countries'>"+jQuery.i18n.map["common.go-to-countries"]+"&nbsp;&nbsp;&nbsp;<i class='fa fa-chevron-right' aria-hidden='true'></i></a></div>");
+            $("#countries-alternative_wrapper .dataTable-top").append("<div style='font:15px Ubuntu,Helvetica,sans-serif; color:#636363; text-shadow:0 1px #F6F6F6; letter-spacing:-1px; margin-left:10px; margin-top: 8px; text-transform: uppercase;'>"+jQuery.i18n.map["sidebar.analytics.countries"]+"</div>");
+        }
+        else{
+            CountlyHelpers.refreshTable(self.country_dtable, countlyLocation.getLocationData({maxCountries:10}));
+        }
+    },
     destroy:function () {
         $("#content-top").html("");
     }
@@ -271,8 +308,8 @@ window.MobileDashboardView = countlyView.extend({
 app.addAppType("mobile", MobileDashboardView);
 
 $( document ).ready(function() {
-    var menu = '<a href="#/all" id="allapps-menu" class="item analytics active">'+
-		'<div class="logo fa fa-list-alt" style="background-image:none; font-size:24px; text-align:center; width:35px; margin-left:14px; line-height:42px;"></div>'+
+    var menu = '<a href="#/all" id="allapps-menu" class="item analytics">'+
+		'<div class="logo ion-android-apps"></div>'+
 		'<div class="text" data-localize="mobile.allapps.title"></div>'+
 	'</a>';
 	$('#mobile-type a').first().before(menu);

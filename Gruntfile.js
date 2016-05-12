@@ -43,6 +43,7 @@ module.exports = function(grunt) {
 				'frontend/express/public/javascripts/dom/dataTables/js/jquery.dataTables.js',
 				'frontend/express/public/javascripts/dom/dataTables/js/ZeroClipboard.js',
 				'frontend/express/public/javascripts/dom/dataTables/js/TableTools.js',
+                'frontend/express/public/javascripts/dom/pace/pace.min.js'
 			],
 			dest: 'frontend/express/public/javascripts/min/countly.dom.concat.js'
 		},
@@ -63,7 +64,8 @@ module.exports = function(grunt) {
 				'frontend/express/public/javascripts/utils/initialAvatar.js',
 				'frontend/express/public/javascripts/utils/jquery.amaran.min.js',
 				'frontend/express/public/javascripts/utils/jquery.titlealert.js',
-				'frontend/express/public/javascripts/countly/countly.common.js',
+                'frontend/express/public/javascripts/utils/jquery.hoverIntent.minified.js',
+				'frontend/express/public/javascripts/countly/countly.common.js'
 			],
 			dest: 'frontend/express/public/javascripts/min/countly.utils.concat.js'
 		},
@@ -77,7 +79,7 @@ module.exports = function(grunt) {
 				'frontend/express/public/javascripts/visualization/flot/jquery.flot.stack.js',
 				'frontend/express/public/javascripts/visualization/gauge.min.js',
 				'frontend/express/public/javascripts/visualization/d3/d3.min.js',
-				'frontend/express/public/javascripts/visualization/rickshaw/rickshaw.min.js',
+				'frontend/express/public/javascripts/visualization/rickshaw/rickshaw.min.js'
 			],
 			dest: 'frontend/express/public/javascripts/min/countly.visualization.concat.js'
 		},
@@ -95,7 +97,7 @@ module.exports = function(grunt) {
 				'frontend/express/public/javascripts/countly/countly.app.version.js',
 				'frontend/express/public/javascripts/countly/countly.carrier.js',
 				'frontend/express/public/javascripts/countly/countly.allapps.js',
-				'frontend/express/public/javascripts/countly/countly.template.js',
+				'frontend/express/public/javascripts/countly/countly.template.js'
 			],
 			dest: 'frontend/express/public/javascripts/min/countly.lib.concat.js'
 		}
@@ -112,7 +114,7 @@ module.exports = function(grunt) {
 				'frontend/express/public/javascripts/min/countly.dom.js': 'frontend/express/public/javascripts/min/countly.dom.concat.js',
 				'frontend/express/public/javascripts/min/countly.utils.js': 'frontend/express/public/javascripts/min/countly.utils.concat.js',
 				'frontend/express/public/javascripts/min/countly.visualization.js': 'frontend/express/public/javascripts/min/countly.visualization.concat.js',
-				'frontend/express/public/javascripts/min/countly.lib.js': 'frontend/express/public/javascripts/min/countly.lib.concat.js',
+				'frontend/express/public/javascripts/min/countly.lib.js': 'frontend/express/public/javascripts/min/countly.lib.concat.js'
 			}
 		}
     },
@@ -125,7 +127,8 @@ module.exports = function(grunt) {
 	    			'frontend/express/public/stylesheets/amaranjs/amaran.min.css',
 	    			'frontend/express/public/javascripts/dom/tipsy/tipsy.css',
 	    		    'frontend/express/public/javascripts/visualization/rickshaw/rickshaw.min.css',
-	    		],
+                    'frontend/express/public/javascripts/dom/pace/pace-theme-flash.css'
+	    		]
     		}
     	}
     },
@@ -161,7 +164,7 @@ module.exports = function(grunt) {
   			stylesheets = path.join(pluginPath, 'frontend/public/stylesheets'),
   			images = path.join(pluginPath, 'frontend/public/images', plugin);
 
-  		if (fs.statSync(javascripts).isDirectory()) {
+  		if (fs.existsSync(javascripts) && fs.statSync(javascripts).isDirectory()) {
   			files = fs.readdirSync(javascripts);
   			if (files.length) {
   				// move models to the top, then all dependencies, then views
@@ -182,7 +185,7 @@ module.exports = function(grunt) {
   			}
   		}
 
-  		if (fs.statSync(stylesheets).isDirectory()) {
+	  	if (fs.existsSync(stylesheets) && fs.statSync(stylesheets).isDirectory()) {
 	  		files = fs.readdirSync(stylesheets);
 	  		files.forEach(function(name){
 	  			var file = path.join(stylesheets, name);
@@ -193,7 +196,7 @@ module.exports = function(grunt) {
   		}
 
   		try {
-  			if (fs.statSync(images).isDirectory()) {
+  			if (fs.existsSync(images) && fs.statSync(images).isDirectory()) {
   				img.push({expand: true, cwd:'plugins/' + plugin + '/frontend/public/images/' + plugin + '/', filter:'isFile', src:'**', dest: 'frontend/express/public/images/' + plugin + '/'});
   			}
   		} catch(err) {
@@ -236,6 +239,7 @@ module.exports = function(grunt) {
   	};
 
   	[path.join(__dirname, 'frontend/express/public/localization/dashboard'), path.join(__dirname, 'frontend/express/public/localization/help'), path.join(__dirname, 'frontend/express/public/localization/mail')].forEach(function(dir){
+  		if (!fs.existsSync(dir)) return;
   		fs.readdirSync(dir).forEach(function(name){
   			var file = path.join(dir, name);
   		  	if (fs.statSync(file).isFile()) {

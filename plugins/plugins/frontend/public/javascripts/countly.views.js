@@ -37,7 +37,8 @@ window.PluginsView = countlyView.extend({
                     { "mData": function(row, type){return row.title;}, "sType":"string", "sTitle": jQuery.i18n.map["plugins.name"]},
                     { "mData": function(row, type){return row.description;}, "sType":"string", "sTitle": jQuery.i18n.map["plugins.description"] },
                     { "mData": function(row, type){return row.version;}, "sType":"string", "sTitle": jQuery.i18n.map["plugins.version"], "sClass":"center" },
-                    { "mData": function(row, type){if(type == "display"){ if(!row.enabled) return '<a class="icon-button green btn-header btn-plugins" id="plugin-'+row.code+'">'+jQuery.i18n.map["plugins.enable"]+'</a>'; else return '<a class="icon-button red btn-header btn-plugins" id="plugin-'+row.code+'">'+jQuery.i18n.map["plugins.disable"]+'</a>';}else return row.enabled;}, "sType":"string", "sTitle": jQuery.i18n.map["plugins.state"], "sClass":"shrink center"},
+                    { "mData": function(row, type){if(!row.enabled) return jQuery.i18n.map["plugins.disabled"]; else return jQuery.i18n.map["plugins.enabled"];}, "sType":"string", "sTitle": jQuery.i18n.map["plugins.status"], "sClass":"center" },
+                    { "mData": function(row, type){if(type == "display"){ var prepackagedClass = row.prepackaged ? 'disabled' : 'btn-plugins'; if(!row.enabled) return '<a class="icon-button green btn-header '+prepackagedClass+'" id="plugin-'+row.code+'">'+jQuery.i18n.map["plugins.enable"]+'</a>'; else return '<a class="icon-button red btn-header '+prepackagedClass+'" id="plugin-'+row.code+'">'+jQuery.i18n.map["plugins.disable"]+'</a>';}else return row.enabled;}, "sType":"string", "sTitle": jQuery.i18n.map["plugins.state"], "sClass":"shrink center"},
                     { "mData": function(row, type){if(row.homepage != "") return '<a class="icon-button btn-header light" href="'+ row.homepage + '" target="_blank">'+jQuery.i18n.map["plugins.homepage"]+'</a>'; else return "";}, "sType":"string", "sTitle": jQuery.i18n.map["plugins.homepage"], "sClass":"shrink center"}
                 ]
             }));
@@ -52,7 +53,7 @@ window.PluginsView = countlyView.extend({
         var overlay = $("#overlay").clone();
         $("body").append(overlay);
         overlay.show();
-        var loader = $(this.el).find("#content-loader");
+        var loader = $(this.el).find("#loader");
         loader.show();
         countlyPlugins.toggle(plugins, function(res){
             var msg = {clearAll:true};
@@ -107,6 +108,7 @@ window.ConfigurationsView = countlyView.extend({
             "frontend-session_timeout":jQuery.i18n.map["configs.frontend-session_timeout"],
             "frontend-theme":jQuery.i18n.map["configs.frontend-theme"],
             "frontend-use_google":jQuery.i18n.map["configs.frontend-use_google"],
+            "frontend-code":jQuery.i18n.map["configs.frontend-code"],
             "api-domain":jQuery.i18n.map["configs.api-domain"],
             "api-safe":jQuery.i18n.map["configs.api-safe"],
             "api-session_duration_limit":jQuery.i18n.map["configs.api-session_duration_limit"],
@@ -194,6 +196,32 @@ window.ConfigurationsView = countlyView.extend({
                         select += '<div data-value="" class="segmentation-option item">'+jQuery.i18n.map["configs.no-theme"]+'</div>';
                     else
                         select += '<div data-value="'+themes[i]+'" class="segmentation-option item">'+themes[i]+'</div>';
+                }
+
+            select += '</div>'+
+                '</div>'+
+            '</div>';
+            return select;
+        });
+        
+        //register some common system config inputs
+        this.registerInput("logs-default", function(value){
+            var categories = ['debug', 'info', 'warn', 'error'];
+            var select = '<div class="cly-select" id="logs-default">'+
+                '<div class="select-inner">'+
+                    '<div class="text-container">';
+            if(value && value.length)
+                select += '<div class="text">'+jQuery.i18n.map["configs.logs."+value]+'</div>';
+            else
+                select += '<div class="text">'+Query.i18n.map["configs.logs.warn"]+'</div>';
+            select += '</div>'+
+                    '<div class="right combo"></div>'+
+                '</div>'+
+                '<div class="select-items square">'+
+                    '<div>';
+                    
+                for(var i = 0; i < categories.length; i++){
+                    select += '<div data-value="'+categories[i]+'" class="segmentation-option item">'+jQuery.i18n.map["configs.logs."+categories[i]]+'</div>';
                 }
 
             select += '</div>'+
@@ -365,10 +393,17 @@ window.ConfigurationsView = countlyView.extend({
         return configsHTML;
     },
     getInputLabel: function(id, value){
+        var ns = id.split("-")[0];
+        if(ns != "frontend" && ns != "api" && ns != "apps" && ns != "logs" && countlyGlobal["plugins"].indexOf(ns) == -1){
+            return null;
+        }
+        var ret = "";
+        if(jQuery.i18n.map["configs.help."+id])
+            ret = "<span class='config-help'>"+jQuery.i18n.map["configs.help."+id]+"</span>";
         if(typeof this.predefinedLabels[id] != "undefined")
-            return this.predefinedLabels[id];
+            return "<div>"+this.predefinedLabels[id]+"</div>"+ret;
         else
-            return value;
+            return "<div>"+value+"</div>"+ret;
     },
     getInputByType: function(id, value){
         if(this.predefinedInputs[id]){

@@ -1,6 +1,8 @@
 var mail = {},
     nodemailer = require('nodemailer'),
     request = require('request'),
+    net = require('net'),
+    extIP = require('external-ip'),
     sendmailTransport = require('nodemailer-sendmail-transport'),
     smtpTransport = require('nodemailer-smtp-transport'),
     localize = require('../../utils/localization.js'),
@@ -120,10 +122,30 @@ mail.lookup = function(callback) {
         }
         callback(false, domain);
     } else {
-        request('http://ifconfig.me/ip', function(error, response, body) {
-            callback(error, "http://"+body);
+        getIP(function (err, ip) {
+            if(err)
+                getNetworkIP(function(err, ip){callback(err, "http://"+ip);});
+            else
+                callback(err, "http://"+ip);
         });
     }
 }
+
+var getIP = extIP({
+    timeout: 600,
+    getIP: 'parallel'
+});
+
+function getNetworkIP(callback) {
+  var socket = net.createConnection(80, 'www.google.com');
+  socket.on('connect', function() {
+    callback(undefined, socket.address().address);
+    socket.end();
+  });
+  socket.on('error', function(e) {
+    callback(e, 'localhost');
+  });
+}
+
 plugins.extendModule("mail", mail);
 module.exports = mail;

@@ -1,4 +1,5 @@
 var common = require('./../../utils/common.js'),
+	manager = require('../../../plugins/pluginManager.js'),
 	log = common.log('jobs'),
 	later = require('later'),
 	_ = require('underscore'),
@@ -12,9 +13,9 @@ var STATUS = {
 	CANCELLED: 3,
 };
 
-var DELAY_BETWEEN_CHECKS = 5000,
+var DELAY_BETWEEN_CHECKS = 1000,
 	MAXIMUM_CONCURRENT_JOBS_PER_NAME = 10000,
-	MAXIMUM_IN_LINE_JOBS_PER_NAME = 20,
+	MAXIMUM_IN_LINE_JOBS_PER_NAME = 40,
 	MAXIMUM_JOB_TIMEOUT = 20000;
 
 /**
@@ -68,7 +69,6 @@ var Job = function(name, data) {
 
 			log.i('replacing job %j with', query, json);
 			collection.findAndModify(query, [['_id', 1]], {$set: json}, {new: true}, function(err, job){
-                job = job.value;
 				if (err) {
 					log.e('job replacement error, saving new job', err, job);
 					collection.save(json, clb || function(err){
@@ -86,7 +86,7 @@ var Job = function(name, data) {
 						}
 					});
 				} else {
-					log.i('job replacing done', job);
+					log.i('job replacing done', job.value);
 					if (clb) { clb(); }
 				}
 			});
@@ -257,7 +257,7 @@ var JobWorker = function(processors){
 			}
 
 			log.d('Looking for jobs ...'); 
-			collection.find(find).sort({next: 1}).limit(10).toArray(function(err, jobs){
+			collection.find(find).sort({next: 1}).limit(MAXIMUM_IN_LINE_JOBS_PER_NAME).toArray(function(err, jobs){
 				if (err) { 
 					log.e('Error while looking for jobs: %j', err); 
 					this.nextAfterDelay();
@@ -291,7 +291,7 @@ var JobWorker = function(processors){
 						}
 
 						collection.findAndModify({_id: job._id, status: {$in: [STATUS.RUNNING, STATUS.SCHEDULED]}}, [['_id', 1]], update, function(err, job){
-		                    job = job.value;
+                			job = job && job.ok ? job.value : null;
 							if (err) {
 								log.e('Couldn\'t update a job: %j', err);
 							} else if (!job) {
@@ -401,11 +401,12 @@ var JobWorker = function(processors){
 module.exports = {
 	workers: [],
 	startWorker: function(types, jobs, runPlugins, started) {
+		manager.loadConfigs(common.db, function(){
 		types = types || process.env.COUNTLY_JOBS || null;
 		jobs = jobs || {};
 		started = started || function(){};
 
-		var plugins = runPlugins ? require('../../../plugins/plugins.json') : [];
+		var plugins = runPlugins ? manager.getPlugins() : [];
 		if (!plugins) { 
 			log.e('Won\'t start jobs because no plugins.json exist');
 			return;
@@ -467,6 +468,7 @@ module.exports = {
 		} else {
 			started(null, null);
 		}
+		});
 	},
 	job: function(name, data) {
 		return new Job(name, data);

@@ -42,6 +42,8 @@ var APN_ERRORS = {
 var readP12 = function(path, password) {
 	if (log) { log.d('Reading certificate from %j', path); }
 
+	password = password || undefined;
+
 	var buffer = fs.readFileSync(path),
 		asn1 = forge.asn1.fromDer(buffer.toString("binary"), false),
 		p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, password);
@@ -79,7 +81,7 @@ var readP12 = function(path, password) {
 					topics = topics.value.replace(/0[\x00-\x1f\(\)!]/gi, '')
 										.replace('\f\f', '\f')
 										.split('\f')
-										.map(s => s.replace(/[\x00-\x1f\(\)!]/gi, '').trim());
+										.map(s => s.replace(/[\x00-\x1f\(\)!,$]/gi, '').trim());
 					topics.shift();
 
 					for (var i = 0; i < topics.length; i++) {

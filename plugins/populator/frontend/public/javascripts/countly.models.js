@@ -16,7 +16,15 @@
         _store: ["com.android.vending","com.google.android.feedback","com.google.vending","com.slideme.sam.manager","com.amazon.venezia","com.sec.android.app.samsungapps","com.nokia.payment.iapenabler","com.qihoo.appstore","cn.goapk.market","com.wandoujia.phoenix2","com.hiapk.marketpho","com.hiapk.marketpad","com.dragon.android.pandaspace","me.onemobile.android","com.aspire.mm","com.xiaomi.market","com.miui.supermarket","com.baidu.appsearch","com.tencent.android.qqdownloader","com.android.browser","com.bbk.appstore","cm.aptoide.pt","com.nduoa.nmarket","com.rim.marketintent","com.lenovo.leos.appstore","com.lenovo.leos.appstore.pad","com.keenhi.mid.kitservice","com.yingyonghui.market","com.moto.mobile.appstore","com.aliyun.wireless.vos.appstore","com.appslib.vending","com.mappn.gfan","com.diguayouxi","um.market.android","com.huawei.appmarket","com.oppo.market","com.taobao.appcenter"],
         _source: ["https://www.google.lv", "https://www.google.co.in/", "https://www.google.ru/", "http://stackoverflow.com/questions", "http://stackoverflow.com/unanswered", "http://stackoverflow.com/tags", "http://r.search.yahoo.com/"]
 	};
-	var events = ["Login", "Logout", "Lost", "Won", "Achievement","Sound","Shared", "[CLY]_view"];
+	var eventsMap = {
+		"Login": ["Lost", "Won"],
+		"Logout": [],
+		"Lost": ["Won", "Achievement", "Lost"],
+		"Won": ["Lost", "Achievement"],
+		"Achievement": ["Sound", "Shared"],
+		"Sound": ["Lost", "Won"],
+		"Shared": ["Lost", "Won"],
+	};
 	var pushEvents = ["[CLY]_push_sent", "[CLY]_push_open", "[CLY]_push_action"];
 	var segments  = {
 		Login: {referer: ["twitter", "notification", "unknown"]},
@@ -72,6 +80,9 @@
 	
 		return generatedString;
 	}
+    function getProp(name){
+		return props[name][Math.floor(Math.random()*props[name].length)];
+	}
 	function user(id){
 		this.getId = function() {
 			function s4() {
@@ -80,16 +91,15 @@
 			return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
 		};
 		
-		this.getProp = function(name){
-			return props[name][Math.floor(Math.random()*props[name].length)];
-		};
+		this.getProp = getProp;
 		
 		var that = this;
+        this.stats = {u:0,s:0,x:0,d:0,e:0,r:0,b:0,c:0,p:0};
 		this.id = this.getId();
 		this.isRegistered = false;
 		this.iap = countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID].iap_event || "";
 		if(this.iap != ""){
-			events.push(this.iap);
+            eventsMap[this.iap] = segments.Buy;
 		}
 
 		this.hasSession = false;
@@ -102,6 +112,7 @@
 		this.metrics = {};
 		this.startTs = startTs;
 		this.endTs = endTs;
+		this.events = [];
 		this.ts = getRandomInt(this.startTs, this.endTs);
 		for(var i in props){
 			if(i == "_os" || i == "_os_web"){
@@ -205,9 +216,19 @@
         };
 		
 		this.getEvent = function(id){
-			if(!id){
-				id = events[Math.floor(Math.random()*events.length)];
+            this.stats.e++;
+			if (!id) {
+				if (this.previousEventId) {
+					id = eventsMap[this.previousEventId][Math.floor(Math.random()*eventsMap[this.previousEventId].length)];
+				} else {
+					id = 'Login';
+				}
 			}
+
+			if (id in eventsMap) {
+            	this.previousEventId = id;
+			}
+
 			var event = {
 				"key": id,
 				"count": 1,
@@ -215,8 +236,9 @@
                 "hour": getRandomInt(0, 23),
                 "dow": getRandomInt(0, 6)
 			};
+			this.ts += 1000;
 			if(id == this.iap){
-				stats.b++;
+				this.stats.b++;
 				event.sum = getRandomInt(100, 500)/100;
 				var segment;
 				event.segmentation = {};
@@ -237,6 +259,7 @@
                 event.dur = getRandomInt(0, 100);
             else
                 event.dur = getRandomInt(0, 10);
+
 			return [event];
 		};
         
@@ -248,15 +271,18 @@
             return events;
         };
 		
+		this.getPushEvents = function(){
+			var events = this.getPushEvent('[CLY]_push_sent');
+            if(Math.random() >= 0.5){
+                events = events.concat(this.getPushEvent('[CLY]_push_open'));
+                if (Math.random() >= 0.8) {
+                    events = events.concat(this.getPushEvent('[CLY]_push_action'));
+                }
+            }
+            return events;
+		};
 		this.getPushEvent = function(id){
-			if(!id){
-                if(Math.random() >= 0.4)
-                    id = "[CLY]_push_sent";
-                else if(Math.random() >= 0.4)
-                    id = "[CLY]_push_open";
-                else
-                    id = "[CLY]_push_action";
-			}
+            this.stats.e++;
 			var event = {
 				"key": id,
 				"count": 1,
@@ -265,6 +291,7 @@
                 "dow": getRandomInt(0, 6),
                 "test": 1 // Events starting with [CLY]_ are ignored by the API (internal events). This flag is to bypass that.
 			};
+			this.ts += 1000;
 			if(segments[id]){
 				var segment;
 				event.segmentation = {};
@@ -278,55 +305,57 @@
 		
 		this.startSession = function(){
 			this.ts = this.ts+60*60*24+100;
-			stats.s++;
+			this.stats.s++;
+            var req = {};
 			if(!this.isRegistered){
 				this.isRegistered = true;
-				stats.u++;
-                var events = this.getEvents(6);
-                events.push(this.getEvent("[CLY]_view")[0]);
-                events.push(this.getEvent("Login")[0]);
-				this.request({timestamp:this.ts, begin_session:1, metrics:this.metrics, user_details:this.userdetails, events:events});
+				this.stats.u++;
+                var events = this.getEvent("Login").concat(this.getEvent("[CLY]_view")).concat(this.getEvents(4));
+				req = {timestamp:this.ts, begin_session:1, metrics:this.metrics, user_details:this.userdetails, events:events};
 				if(Math.random() > 0.5){
 					this.hasPush = true;
-					stats.p++;
-					var data = {timestamp:this.ts, token_session:1, test_mode:0};
-					data[this.platform.toLowerCase()+"_token"] = randomString(8);
-					this.request(data);
+					this.stats.p++;
+                    req["token_session"] = 1;
+                    req["test_mode"] = 0;
+                    req.events = req.events.concat(this.getPushEvents());
+					req[this.platform.toLowerCase()+"_token"] = randomString(8);
 				}
 			}
 			else{
-				stats.e++;
-                var events = this.getEvents(6);
-                events.push(this.getEvent("[CLY]_view")[0]);
-                events.push(this.getEvent("Login")[0]);
-				this.request({timestamp:this.ts, begin_session:1, events:events});
+                var events = this.getEvent("Login").concat(this.getEvent("[CLY]_view")).concat(this.getEvents(4));
+				req = {timestamp:this.ts, begin_session:1, events:events};
+			}
+            if(this.iap != "" && Math.random() > 0.5){
+                req.events = req.events.concat(this.getEvent(this.iap));
+            }
+            if(Math.random() > 0.5){
+                this.stats.c++;
+				req["crash"] = this.getCrash();
 			}
 			this.hasSession = true;
+            this.request(req);
 			this.timer = setTimeout(function(){that.extendSession()}, timeout);
 		};
 		
 		this.extendSession = function(){
 			if(this.hasSession){
+                var req = {};
 				this.ts = this.ts + 30;
-				stats.x++;
-				stats.d += 30;
-				stats.e++;
-				var events = this.getEvents(6);
-                events.push(this.getEvent("[CLY]_view")[0]);
-                if(this.hasPush){
-                    events.push(this.getPushEvent()[0]);
-				}
-                this.request({timestamp:this.ts, session_duration:30, events:events});
+				this.stats.x++;
+				this.stats.d += 30;
+                var events = this.getEvent("[CLY]_view").concat(this.getEvents(2));
+                req = {timestamp:this.ts, session_duration:30, events:events};
 				if(Math.random() > 0.8){
 					this.timer = setTimeout(function(){that.extendSession()}, timeout);
 				}
 				else{
-					stats.c++;
 					if(Math.random() > 0.5){
-						this.request({timestamp:this.ts, crash:this.getCrash()});
+                        this.stats.c++;
+						req["crash"] = this.getCrash();
 					}
-					this.endSession();
+					this.timer = setTimeout(function(){that.endSession()}, timeout);
 				}
+                this.request(req);
 			}
 		}
 		
@@ -337,20 +366,20 @@
 			}
 			if(this.hasSession){
 				this.hasSession = false;
-				stats.e++;
-                var events = this.getEvents(6);
-                events.push(this.getEvent("Logout")[0]);
+                var events = this.getEvents(2).concat(this.getEvent("Logout"));
 				this.request({timestamp:this.ts, end_session:1, events:events});
 			}
 		};
 		
 		this.request = function(params){
-			stats.r++;
+			this.stats.r++;
 			params.device_id = this.id;
 			params.ip_address = this.ip;
             params.hour = getRandomInt(0, 23);
             params.dow = getRandomInt(0, 6);
+            params.stats = JSON.parse(JSON.stringify(this.stats));
 			bulk.push(params);
+            this.stats = {u:0,s:0,x:0,d:0,e:0,r:0,b:0,c:0,p:0};
 			countlyPopulator.sync();
 		};
 	}
@@ -361,10 +390,10 @@
 	var timeout = 1000;
 	var bucket = 50;
 	var generating = false;
+	var stopCallback = null;
 	var users = [];
 	var userAmount = 1000;
 	var queued = 0;
-	var stats = {u:0,s:0,x:0,d:0,e:0,r:0,b:0,c:0,p:0};
 	var totalStats = {u:0,s:0,x:0,d:0,e:0,r:0,b:0,c:0,p:0};
 	
 	function updateUI(stats){
@@ -412,11 +441,15 @@
     }
     
     function genereateCampaigns(callback){
+        if(typeof countlyAttribution === "undefined"){
+            callback();
+            return;
+        }
         var campaigns = ["social", "ads", "landing"];
         createCampaign("social", "Social Campaign", "0.5", "click", function(){
             createCampaign("ads", "Ads Campaign", "1", "install", function(){
                 createCampaign("landing", "Landing page", "30", "campaign", function(){
-                    for(var i = 0; i < 200; i++){
+                    for(var i = 0; i < 100; i++){
                         setTimeout(function(){
                             clickCampaign(campaigns[getRandomInt(0, campaigns.length-1)]);
                         },1);
@@ -431,9 +464,32 @@
         var bulk = [];
         for(var i = 0; i < users; i++){
             for(var j = 0; j < ids.length; j++){
-                bulk.push({ip_address:chance.ip(), device_id:i+""+ids[j], begin_session:1, timestamp:ts});
+                var metrics = {};
+                for(var i in props){
+                    if(i == "_os" || i == "_os_web"){
+                        if(i == "_os_web" && countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID].type == "web"){
+                            metrics["_os"] = getProp(i);
+                        }
+                        else{
+                            metrics[i] = getProp(i);
+                        }
+                    }
+                    else if(i != "_store" && i != "_source")
+                        metrics[i] = getProp(i);
+                }
+                if(countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID].type == "web")
+                    metrics["_store"] = getProp("_source");
+                else if(this.platform == "Android")
+                    metrics["_store"] = getProp("_store");
+                
+                var userdetails = {name: chance.name(), username: chance.twitter().substring(1), email:chance.email(), organization:capitaliseFirstLetter(chance.word()), phone:chance.phone(), gender:chance.gender().charAt(0), byear:chance.birthday().getFullYear(), custom:createRandomObj()};
+                
+                bulk.push({ip_address:chance.ip(), device_id:i+""+ids[j], begin_session:1, metrics:metrics, user_details:userdetails, timestamp:ts, hour:getRandomInt(0, 23), dow:getRandomInt(0, 6)});
+                totalStats.s++;
+                totalStats.u++;
             }
         }
+        totalStats.r++;
         $.ajax({
             type:"GET",
             url:countlyCommon.API_URL + "/i/bulk",
@@ -447,6 +503,10 @@
     }
     
     function generateRetention(callback){
+        if(typeof countlyRetention === "undefined"){
+            callback();
+            return;
+        }
         var ts = endTs - 60*60*24*9;
         var ids = [ts];
         var users = 10;
@@ -503,13 +563,13 @@
 		}
 	};
 	countlyPopulator.generateUsers = function (amount) {
+		stopCallback = null;
 		userAmount = amount;
 		bulk = [];
-		stats = {u:0,s:0,x:0,d:0,e:0,r:0,b:0,c:0,p:0};
 		totalStats = {u:0,s:0,x:0,d:0,e:0,r:0,b:0,c:0,p:0};
-		bucket = Math.max(amount/5, 10);
+		bucket = Math.max(amount/50, 10);
 		var mult = (Math.round(queued/10)+1);
-		timeout = bucket*100*mult*mult;
+		timeout = bucket*10*mult*mult;
 		generating = true;
 		function createUser(){
 			var u = new user();
@@ -535,25 +595,21 @@
 				countlyPopulator.sync(true);
 		}
         generateRetention(function(){
-            if(typeof countlyAttribution != "undefined"){
-                genereateCampaigns(function(){
-                    for(var i = 0; i < amount; i++){
-                        createUser();
-                    }
-                    setTimeout(processUsers, timeout);
-                });
-            }
-            else{
+            genereateCampaigns(function(){
                 for(var i = 0; i < amount; i++){
                     createUser();
                 }
                 setTimeout(processUsers, timeout);
-            }
+            });
         });
+                    // for(var i = 0; i < amount; i++){
+                    //     createUser();
+                    // }
 	};
 	
-	countlyPopulator.stopGenerating = function () {
+	countlyPopulator.stopGenerating = function (clb) {
 		generating = false;
+		stopCallback = clb;
 		var u;
 		for(var i = 0; i < users.length; i++){
 			u = users[i];
@@ -561,6 +617,10 @@
 				u.endSession();
 		}
 		users = [];
+
+		if (!countlyPopulator.bulking && stopCallback) {
+			countlyPopulator.ensureJobs();
+		}
 	};
 	
 	countlyPopulator.isGenerating = function(){
@@ -568,34 +628,109 @@
 	}
     
     countlyPopulator.sync = function (force) {
-		if(generating && (force || bulk.length > bucket)){
-			var temp = {};
-			for(var i in stats){
-				temp[i] = stats[i];
-			}
-			stats = {u:0,s:0,x:0,d:0,e:0,r:0,b:0,c:0,p:0};
+		if(generating && (force || bulk.length > bucket) && !countlyPopulator.bulking){
 			queued++;
 			var mult = Math.round(queued/10)+1;
-			timeout = bucket*100*mult*mult;
+			timeout = bucket*10*mult*mult;
 			$("#populate-stats-br").text(queued);
+			countlyPopulator.bulking = true;
+            var req = bulk.splice(0, bucket);
+            var temp = {u:0,s:0,x:0,d:0,e:0,r:0,b:0,c:0,p:0};
+            for(var i in req){
+                if(req[i].stats){
+                    for(var stat in req[i].stats){
+                        temp[stat] += req[i].stats[stat];
+                    }
+                    delete req[i].stats;
+                }
+            }
 			$.ajax({
 				type:"POST",
 				url:countlyCommon.API_URL + "/i/bulk",
 				data:{
 					app_key:countlyCommon.ACTIVE_APP_KEY,
-					requests:JSON.stringify(bulk)
+					requests:JSON.stringify(req)
 				},
 				success:function (json) {
 					queued--;
 					$("#populate-stats-br").text(queued);
 					updateUI(temp);
+					countlyPopulator.bulking = false;
+					countlyPopulator.sync();
+					if (!generating && stopCallback) {
+						countlyPopulator.ensureJobs();
+					}
 				},
 				error:function(){
 					queued--;
 					$("#populate-stats-br").text(queued);
+					countlyPopulator.bulking = false;
+					countlyPopulator.sync();
+					if (!generating && stopCallback) {
+						countlyPopulator.ensureJobs();
+					}
 				}
 			});
-			bulk = [];
 		}
+    };	
+
+    var ensuringJobs = false;
+    countlyPopulator.ensureJobs = function() {
+        if(typeof countlyFlow === "undefined"){
+            if (stopCallback) { stopCallback(true); }
+            return;
+        }
+    	if (ensuringJobs) { return; }
+    	ensuringJobs = true;
+
+    	$.ajax({
+    		type: "GET",
+    		url: countlyCommon.API_URL + "/i/flows/lastJob",
+    		data: {
+    			app_key:countlyCommon.ACTIVE_APP_KEY
+    		},
+			success:function (json) {
+    			if (json && json.job) {
+    				function checkAgain() {
+    					$.ajax({
+    						type: "GET",
+    						url: countlyCommon.API_URL + "/i/flows/lastJob",
+    						data: { 
+    							job: json.job, 
+    							app_key:countlyCommon.ACTIVE_APP_KEY 
+    						},
+    						success: function (obj) {
+    							if (obj && obj.done) {
+    								ensuringJobs = false;
+    								if (stopCallback) { stopCallback(true); }
+    							} else {
+    								if (stopCallback) { stopCallback(false); }
+    								setTimeout(checkAgain, 3000);
+    							}
+    						},
+    						error: function(xhr, e, t){
+								ensuringJobs = false;
+								if (stopCallback) { stopCallback(t); }
+    						}
+    					});
+    				}
+    				checkAgain();
+    			} else if (json && json.done) {
+					if (stopCallback) { stopCallback(true); }
+    			} else {
+					ensuringJobs = false;
+					if (stopCallback) { stopCallback(json); }
+    			}
+    		},
+    		error:function(xhr, e, t){
+				ensuringJobs = false;
+				if (xhr.responseText && xhr.responseText.indexOf('Invalid path') !== -1) {
+	    			if (stopCallback) { stopCallback(true); }
+				} else {
+	    			if (stopCallback) { stopCallback(t); }
+				}
+    		}
+    	});
+
     };	
 }(window.countlyPopulator = window.countlyPopulator || {}, jQuery));

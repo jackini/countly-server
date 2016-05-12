@@ -18,7 +18,7 @@ var versionInfo = require('./version.info'),
     countlyMail = require('../../api/parts/mgmt/mail.js'),
     countlyStats = require('../../api/parts/data/stats.js'),
 	plugins = require('../../plugins/pluginManager.js'),
-    countlyConfig = require('./config');
+    countlyConfig = require('./config', 'dont-enclose');
     
     var COUNTLY_NAMED_TYPE = "Countly Community Edition v"+COUNTLY_VERSION;
     var COUNTLY_TYPE_CE = true;
@@ -42,7 +42,8 @@ plugins.setConfigs("frontend", {
     production: true,
     theme: "",
     session_timeout: 30*60*1000,
-    use_google: true
+    use_google: true,
+    code: true
 });
 
 var countlyDb = plugins.dbConnection(countlyConfig);
@@ -493,8 +494,9 @@ app.post(countlyConfig.path+'/reset', function (req, res, next) {
         var password = sha1Hash(req.body.password);
 
         countlyDb.collection('password_reset').findOne({prid:req.body.prid}, function (err, passwordReset) {
-            countlyDb.collection('members').update({_id:passwordReset.user_id}, {'$set':{ "password":password }}, function (err, member) {
-                plugins.callMethod("passwordReset", {req:req, res:res, next:next, data:member[0]});
+            countlyDb.collection('members').findAndModify({_id:passwordReset.user_id}, {}, {'$set':{ "password":password }}, function (err, member) {
+                member = member && member.ok ? member.value : null;
+                plugins.callMethod("passwordReset", {req:req, res:res, next:next, data:member});
                 req.flash('info', 'reset.result');
                 res.redirect(countlyConfig.path+'/login');
             });
@@ -753,8 +755,9 @@ app.post(countlyConfig.path+'/user/settings', function (req, res, next) {
 
     var updatedUser = {};
 
-    if (req.body.username) {
+    if (req.body.username && req.body.api_key) {
         updatedUser.username = req.body["username"];
+        updatedUser.api_key = req.body["api_key"];
         if (req.body.lang) {
             updatedUser.lang = req.body.lang;
         }
@@ -785,6 +788,36 @@ app.post(countlyConfig.path+'/user/settings', function (req, res, next) {
                         }
                     });
                 }
+            }
+        });
+    } else {
+        res.send(false);
+        return false;
+    }
+});
+
+app.post(countlyConfig.path+'/user/settings/lang', function (req, res, next) {
+    if (!req.session.uid) {
+        res.end();
+        return false;
+    }
+
+    var updatedUser = {};
+
+    if (req.body.username && req.body.lang) {
+        updatedUser.lang = req.body.lang;
+
+        countlyDb.collection('members').findOne({username:req.body.username}, function (err, member) {
+            if ((member && member._id != req.session.uid) || err) {
+                res.send("username-exists");
+            } else {
+                countlyDb.collection('members').update({"_id":countlyDb.ObjectID(req.session.uid)}, {'$set':updatedUser}, {safe:true}, function (err, member) {
+                    if (member && !err) {
+                        res.send(true);
+                    } else {
+                        res.send(false);
+                    }
+                });
             }
         });
     } else {

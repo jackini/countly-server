@@ -18,10 +18,20 @@ var fetch = {},
             common.db.collection('events').findOne({'_id':params.app_id}, function (err, result) {
                 if (result && result.list) {
                     if (result.order && result.order.length) {
-                        collection = result.order[0];
+                        for (var i = 0; i < result.order.length; i++) {
+                            if(result.order[i].indexOf("[CLY]") !== 0){
+                                collection = result.order[i];
+                                break;
+                            }
+                        }
                     } else {
                         result.list.sort();
-                        collection = result.list[0];
+                        for (var i = 0; i < result.list.length; i++) {
+                            if(result.list[i].indexOf("[CLY]") !== 0){
+                                collection = result.list[i];
+                                break;
+                            }
+                        }
                     }
 
                     var collectionName = "events" + crypto.createHash('sha1').update(collection + params.app_id).digest('hex');
@@ -518,7 +528,12 @@ var fetch = {},
     
                         if (mergedDataObj[year]) {
                             for (var prop in dataObjects[i]['d']) {
-                                mergedDataObj[year][prop] = dataObjects[i]['d'][prop];
+                                if(mergedDataObj[year][prop]){
+                                    _.extend(mergedDataObj[year][prop], dataObjects[i]['d'][prop]) 
+                                }
+                                else{
+                                    mergedDataObj[year][prop] = dataObjects[i]['d'][prop];
+                                }
                             }
                         } else {
                             mergedDataObj[year] = dataObjects[i]['d'] || {};
@@ -526,12 +541,7 @@ var fetch = {},
                     } else {
                         if (mergedDataObj[year][month]) {
                             for (var prop in dataObjects[i]['d']) {
-                                if(mergedDataObj[year][prop]){
-                                    _.extend(mergedDataObj[year][prop], dataObjects[i]['d'][prop]) 
-                                }
-                                else{
-                                    mergedDataObj[year][prop] = dataObjects[i]['d'][prop];
-                                }
+                                mergedDataObj[year][month][prop] = dataObjects[i]['d'][prop];
                             }
                         } else {
                             mergedDataObj[year][month] = dataObjects[i]['d'] || {};

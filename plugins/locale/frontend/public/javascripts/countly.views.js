@@ -24,7 +24,7 @@ window.LanguageView = countlyView.extend({
         if (!isRefresh) {
             $(this.el).html(this.template(this.templateData));
             if(typeof addDrill != "undefined"){
-                addDrill("up.la");
+                $(".widget-header .left .title").after(addDrill("up.la"));
             }
             countlyCommon.drawGraph(languageData.chartDPTotal, "#dashboard-graph", "pie");
             countlyCommon.drawGraph(languageData.chartDPNew, "#dashboard-graph2", "pie");
@@ -77,5 +77,5 @@ $( document ).ready(function() {
 		'<div class="logo languages"></div>'+
 		'<div class="text" data-localize="sidebar.analytics.languages"></div>'+
 	'</a>';
-	$('.sidebar-menu #analytics-submenu').append(menu);
+	$('.sidebar-menu:not(#iot-type) #analytics-submenu').append(menu);
 });

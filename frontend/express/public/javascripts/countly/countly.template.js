@@ -31,7 +31,7 @@ var countlyView = Backbone.View.extend({
     afterRender: function() {},
     render:function () {    //backbone.js view render function
         $("#content-top").html("");
-        this.el.html('<div id="content-loader"></div>');
+        this.el.html('');
 
         if (countlyCommon.ACTIVE_APP_ID) {
             var self = this;
@@ -331,9 +331,24 @@ $.extend(Template.prototype, {
         element.off("keyup", ".cly-select .search input").on("keyup", ".cly-select .search input", function(event) {
             if (!$(this).val()) {
                 $(this).parents(".cly-select").find(".item").removeClass("hidden");
+                $(this).parents(".cly-select").find(".group").show();
             } else {
                 $(this).parents(".cly-select").find(".item:not(:contains('" + $(this).val() + "'))").addClass("hidden");
                 $(this).parents(".cly-select").find(".item:contains('" + $(this).val() + "')").removeClass("hidden");
+                var prevHeader = $(this).parents(".cly-select").find(".group").first();
+                prevHeader.siblings().each(function(){
+                    if($(this).hasClass("group")){
+                        if(prevHeader)
+                            prevHeader.hide();
+                        prevHeader = $(this);
+                    }
+                    else if($(this).hasClass("item") && $(this).is(":visible")){
+                        prevHeader = null;
+                    }
+                    
+                    if(!$(this).next().length && prevHeader)
+                        prevHeader.hide();
+                })
             }
         });
 
@@ -404,6 +419,19 @@ $.extend(Template.prototype, {
 			});
 		}
 	};
+    
+    CountlyHelpers.closeRows = function(dTable){
+        if(dTable.aOpen){
+			$.each( dTable.aOpen, function ( i, id ) {
+				var nTr = $("#"+id)[0];
+				$(nTr).removeClass("selected");
+				$('div.datatablesubrow', $(nTr).next()[0]).slideUp( function () {
+					dTable.fnClose( nTr );
+					dTable.aOpen.splice( i, 1 );
+				} );
+			});
+		}
+    };
 	
 	CountlyHelpers.appIdsToNames = function(context){
         var ret = "";
@@ -1146,7 +1174,7 @@ window.AllAppsView = countlyView.extend({
         }
     },
     refresh:function () {
-        var self = this;
+        /*var self = this;
         $.when(countlyAllApps.initialize()).then(function () {
             if (app.activeView != self) {
                 return false;
@@ -1158,7 +1186,7 @@ window.AllAppsView = countlyView.extend({
             CountlyHelpers.refreshTable(self.dtable, appData);
             self.drawGraph();
             app.localize();
-        });
+        });*/
     }
 });
 
@@ -1234,9 +1262,6 @@ window.CountriesView = countlyView.extend({
         }
 
         var activeApp = countlyGlobal['apps'][countlyCommon.ACTIVE_APP_ID];
-        if (activeApp && activeApp.country) {
-            $("#toggle-map").text(countlyLocation.getCountryName(activeApp.country));
-        }
 
         this.dtable = $('.d-table').dataTable($.extend({}, $.fn.dataTable.defaults, {
             "aaData": locationData,
@@ -1287,7 +1312,6 @@ window.CountriesView = countlyView.extend({
         $(document).bind('selectMapCountry', function () {
             self.cityView = true;
             store.set("countly_location_city", true);
-            $("#toggle-map").addClass("active");
 
             countlyCity.drawGeoChart({height:450, metric:self.maps[self.curMap]});
             self.refresh(true);
@@ -1299,7 +1323,6 @@ window.CountriesView = countlyView.extend({
             if(countlyGlobal["config"].use_google){
                 if (this.cityView) {
                     countlyCity.drawGeoChart({height:450, metric:self.maps[self.curMap]});
-                    $("#toggle-map").addClass("active");
                 } else {
                     countlyLocation.drawGeoChart({height:450, metric:self.maps[self.curMap]});
                 }
@@ -1311,25 +1334,41 @@ window.CountriesView = countlyView.extend({
             this.drawTable();
 
             if (countlyCommon.CITY_DATA === false) {
-                $("#toggle-map").hide();
                 store.set("countly_location_city", false);
             }
-
-            $("#toggle-map").on('click', function () {
-                if ($(this).hasClass("active")) {
+            
+            $("#country-toggle").on('click', function () {
+                if ($(this).hasClass("country_selected")) {
                     self.cityView = false;
-                    countlyLocation.drawGeoChart({height:450, metric:self.maps[self.curMap]});
-                    $(this).removeClass("active");
+                    if(countlyGlobal["config"].use_google)
+                        countlyLocation.drawGeoChart({height:450, metric:self.maps[self.curMap]});
+                    $(this).removeClass("country_selected");
                     self.refresh(true);
                     store.set("countly_location_city", false);
+                    if(countlyGlobal['apps'][countlyCommon.ACTIVE_APP_ID] && countlyGlobal['apps'][countlyCommon.ACTIVE_APP_ID].country)
+                        $(this).text(jQuery.i18n.map["common.show"]+" "+countlyLocation.getCountryName(countlyGlobal['apps'][countlyCommon.ACTIVE_APP_ID].country));
+                    else
+                        $(this).text(jQuery.i18n.map["common.show"]+" "+jQuery.i18n.map["countries.table.country"]);
                 } else {
-                    self.cityView = true;
-                    countlyCity.drawGeoChart({height:450, metric:self.maps[self.curMap]});
-                    $(this).addClass("active");
+                    app.countriesView.cityView = true;
+                    if(countlyGlobal["config"].use_google)
+                        countlyCity.drawGeoChart({height:450, metric:self.maps[self.curMap]});
+                    $(this).addClass("country_selected");
                     self.refresh(true);
                     store.set("countly_location_city", true);
+                    $(this).html('<i class="fa fa-chevron-left" aria-hidden="true"></i>'+jQuery.i18n.map["countries.back-to-list"]);
                 }
             });
+            
+            if(self.cityView){
+                $("#country-toggle").html('<i class="fa fa-chevron-left" aria-hidden="true"></i>'+jQuery.i18n.map["countries.back-to-list"]).addClass("country_selected");
+            }
+            else{
+                if(countlyGlobal['apps'][countlyCommon.ACTIVE_APP_ID] && countlyGlobal['apps'][countlyCommon.ACTIVE_APP_ID].country)
+                    $("#country-toggle").text(jQuery.i18n.map["common.show"]+" "+countlyLocation.getCountryName(countlyGlobal['apps'][countlyCommon.ACTIVE_APP_ID].country));
+                else
+                    $("#country-toggle").text(jQuery.i18n.map["common.show"]+" "+jQuery.i18n.map["countries.table.country"]);
+            }
             
             $(".geo-switch .cly-button-group .icon-button").click(function(){
                 $(".geo-switch .cly-button-group .icon-button").removeClass("active");
@@ -1880,12 +1919,16 @@ window.ManageAppsView = countlyView.extend({
 
             if ($("#new-install-overlay").is(":visible")) {
                 $("#no-app-warning").hide();
-                $("#first-app-success").show();
+                //$("#first-app-success").show();
                 $("#new-install-overlay").fadeOut();
                 countlyCommon.setActiveApp(appId);
                 $("#sidebar-app-select").find(".logo").css("background-image", "url('"+countlyGlobal["cdn"]+"appimages/" + appId + ".png')");
                 $("#sidebar-app-select").find(".text").text(countlyGlobal['apps'][appId].name);
                 app.onAppSwitch(appId, true);
+                app.sidebar.init();
+            }
+            if(countlyGlobal["config"] && countlyGlobal["config"].code && $("#code-countly").length){
+                $("#code-countly").show();
             }
             
             app.onAppManagementSwitch(appId);
@@ -1894,7 +1937,8 @@ window.ManageAppsView = countlyView.extend({
             $("#view-app").find(".widget-header .title").text(countlyGlobal['apps'][appId].name);
             $("#app-edit-name").find(".read").text(countlyGlobal['apps'][appId].name);
             $("#app-edit-name").find(".edit input").val(countlyGlobal['apps'][appId].name);
-            $("#view-app-key").text(countlyGlobal['apps'][appId].key);
+            $("#app-edit-key").find(".read").text(countlyGlobal['apps'][appId].key);
+            $("#app-edit-key").find(".edit input").val(countlyGlobal['apps'][appId].key);
             $("#view-app-id").text(appId);
             $("#app-edit-type").find(".cly-select .text").text(appTypes[countlyGlobal['apps'][appId].type]);
             $("#app-edit-type").find(".cly-select .text").data("value", countlyGlobal['apps'][appId].type);
@@ -2038,6 +2082,9 @@ window.ManageAppsView = countlyView.extend({
             $("#app-add-timezone #app-country").val("");
             $("#app-add-timezone #timezone-select").hide();
             $(".required").hide();
+            if(countlyGlobal["config"] && countlyGlobal["config"].code && $("#code-countly").length){
+                $("#code-countly").show();
+            }
         }
 
         function showAdd() {
@@ -2046,6 +2093,7 @@ window.ManageAppsView = countlyView.extend({
             }
             $(".app-container").removeClass("active");
             $("#first-app-success").hide();
+            $("#code-countly").hide();
             hideEdit();
             var manageBarApp = $("#manage-new-app>div").clone();
             manageBarApp.attr("id", "app-container-new");
@@ -2053,6 +2101,7 @@ window.ManageAppsView = countlyView.extend({
 
             if (jQuery.isEmptyObject(countlyGlobal['apps'])) {
                 $("#cancel-app-add").hide();
+                $("#manage-new-app").hide();
             } else {
                 $("#cancel-app-add").show();
             }
@@ -2081,8 +2130,34 @@ window.ManageAppsView = countlyView.extend({
             $("#add-new-app").hide();
             resetAdd();
             $("#view-app").show();
+            if(countlyGlobal["config"] && countlyGlobal["config"].code && $("#code-countly").length){
+                $("#code-countly").show();
+            }
         }
-
+        
+        if(countlyGlobal["config"] && countlyGlobal["config"].code && $("#code-countly").length){
+            $("#code-countly").show();
+            var url = (location.protocol || "http:")+"//countly.github.io/countly-code-generator/"; 
+                
+            $.getScript( url+"js/sdks.js", function( data, textStatus, jqxhr ) {
+                var server = (location.protocol || "http:")+location.hostname;
+                if(sdks && server){
+                    function initCountlyCode(appId, type){
+                        var app_id = $("#app-edit-id").val();
+                        if(appId && appId != "" && countlyGlobal["apps"][appId]){
+                            $("#code-countly .sdks").empty();
+                            for(var i in sdks){
+                                if(sdks[i].integration)
+                                    $("#code-countly .sdks").append("<a href='http://code.count.ly/integration-"+i+".html?server="+server+"&app_key="+countlyGlobal["apps"][appId].key+"' target='_blank'>"+sdks[i].name.replace("SDK", "")+"</a>");
+                            }
+                        }
+                    }
+                    initCountlyCode($("#app-edit-id").val());
+                    app.addAppManagementSwitchCallback(initCountlyCode);
+                }
+            });
+        }
+        
         initAppManagement(appId);
         initCountrySelect("#app-add-timezone");
 
@@ -2208,13 +2283,18 @@ window.ManageAppsView = countlyView.extend({
             }
 
             var appId = $("#app-edit-id").val(),
-                appName = $("#app-edit-name .edit input").val();
+                appName = $("#app-edit-name .edit input").val(),
+                app_key = $("#app-edit-key .edit input").val();
 
             $(".required").fadeOut().remove();
             var reqSpan = $("<span>").addClass("required").text("*");
 
             if (!appName) {
                 $("#app-edit-name .edit input").after(reqSpan.clone());
+            }
+            
+            if (!app_key) {
+                $("#app-edit-key .edit input").after(reqSpan.clone());
             }
 
             if ($(".required").length) {
@@ -2239,6 +2319,7 @@ window.ManageAppsView = countlyView.extend({
                         name:appName,
                         type:$("#app-edit-type .cly-select .text").data("value") + '',
                         category:$("#app-edit-category .cly-select .text").data("value") + '',
+                        key:app_key,
                         timezone:$("#app-edit-timezone #app-timezone").val(),
                         country:$("#app-edit-timezone #app-country").val()
                     }),
@@ -2302,7 +2383,7 @@ window.ManageAppsView = countlyView.extend({
             initAppManagement(appId);
         });
 
-        $(".app-container:not(#app-container-new)").live("click", function () {
+        $("#management-app-container .app-container:not(#app-container-new)").live("click", function () {
             var appId = $(this).data("id");
             hideEdit();
             $(".app-container").removeClass("active");
@@ -2351,9 +2432,9 @@ window.ManageAppsView = countlyView.extend({
                 $("#app-add-type").parents(".cly-select").after(reqSpan.clone());
             }
 
-            if (!category) {
+            /*if (!category) {
                 $("#app-add-category").parents(".cly-select").after(reqSpan.clone());
-            }
+            }*/
 
             if (!timezone) {
                 $("#app-add-timezone #app-timezone").after(reqSpan.clone());
@@ -2406,6 +2487,8 @@ window.ManageAppsView = countlyView.extend({
                     var newApp = $("#app-container-new");
                     newApp.data("id", data._id);
                     newApp.data("key", data.key);
+                    newApp.find(".name").data("localize", "");
+                    newApp.find(".name").text(data.name);
                     newApp.removeAttr("id");
 
                     if (!ext) {
@@ -2413,6 +2496,9 @@ window.ManageAppsView = countlyView.extend({
                         sidebarApp.find(".name").text(data.name);
                         sidebarApp.data("id", data._id);
                         sidebarApp.data("key", data.key);
+                        newApp.find(".logo").css({
+                            "background-image":"url(appimages/" + data._id + ".png)"
+                        });
 
                         $("#app-nav .apps-scrollable").append(sidebarApp);
                         initAppManagement(data._id);
@@ -2450,6 +2536,7 @@ window.ManageAppsView = countlyView.extend({
                 }
             });
         });
+        
     }
 });
 
@@ -2461,6 +2548,16 @@ window.ManageUsersView = countlyView.extend({
             self.template = t;
         });
     },
+    beforeRender: function() {
+		if(this.template)
+			return true;
+		else{
+			var self = this;
+			return $.when($.get(countlyGlobal["path"]+'/templates/users.html', function(src){
+				self.template = Handlebars.compile(src);
+			})).then(function () {});
+		}
+    },
     renderCommon:function (isRefresh) {
         var self = this;
         $.ajax({
@@ -2471,13 +2568,642 @@ window.ManageUsersView = countlyView.extend({
             dataType:"jsonp",
             success:function (users) {
                 $('#content').html(self.template({
+                    "page-title":jQuery.i18n.map["sidebar.management.users"],
                     users:users,
                     apps:countlyGlobal['apps'],
                     is_global_admin: (countlyGlobal["member"].global_admin) ? true : false
                 }));
+                var tableData = [];
+                for(var i in users){
+                    tableData.push(users[i])
+                }
+                self.dtable = $('#user-table').dataTable($.extend({}, $.fn.dataTable.defaults, {
+                    "aaData": tableData,
+                    "fnRowCallback": function( nRow, aData, iDisplayIndex, iDisplayIndexFull ) {
+                        $(nRow).attr("id", aData._id);
+                    },
+                    "aoColumns": [
+                        { "mData": function(row, type){return row.full_name;}, "sType":"string", "sTitle": jQuery.i18n.map["management-users.full-name"]},
+                        { "mData": function(row, type){return row.username;}, "sType":"string", "sTitle": jQuery.i18n.map["management-users.username"]},
+                        { "mData": function(row, type){if(row.global_admin) return jQuery.i18n.map["management-users.global-admin"]; else if(row.admin_of && row.admin_of.length) return jQuery.i18n.map["management-users.admin"]; else if(row.user_of && row.user_of.length)  return jQuery.i18n.map["management-users.user"]; else return jQuery.i18n.map["management-users.no-role"]}, "sType":"string", "sTitle": jQuery.i18n.map["management-users.no-role"]},
+                        { "mData": function(row, type){return row.email;}, "sType":"string", "sTitle": jQuery.i18n.map["management-users.email"]},
+                    ]
+                }));
+                self.dtable.fnSort( [ [0,'desc'] ] );
+                self.dtable.stickyTableHeaders();
+                CountlyHelpers.expandRows(self.dtable, self.editUser, self);
+                function generatePassword() {
+                    var text = "";
+                    var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+                    for( var i=0; i < 6; i++ )
+                        text += possible.charAt(Math.floor(Math.random() * possible.length));
+                    return text;
+                }
+                function validateEmail(email) { 
+                    var re = /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/;
+                    return re.test(email);
+                }
+                self.initTable();
+                $("#add-user-mgmt").on("click", function(){
+                    CountlyHelpers.closeRows(self.dtable);
+                    $("#listof-apps").hide();
+                    $(".row").removeClass("selected");
+                    if ($(".create-user-row").is(":visible")) { 
+                         $(".create-user-row").slideUp();
+                    }
+                    else{
+                        $(".create-user-row").slideDown();
+                        self.initTable();
+                    }
+                });
+                $("#listof-apps .app").on('click', function() {
+                    if ($(this).hasClass("disabled")) {
+                        return true;
+                    }
+                    
+                    $(this).toggleClass("selected");
+                    
+                    if ($("#listof-apps .app.selected").length == $("#listof-apps .app").length) {
+                        $("#select-all").hide();
+                        $("#deselect-all").show();
+                    } else {
+                        $("#select-all").show();
+                        $("#deselect-all").hide();
+                    }
+                    
+                    adminsOf = [];
+                    var adminOfIds = [];
+                    $("#listof-apps .app.selected").each(function() {
+                        adminsOf[adminsOf.length] = $(this).find(".name").text();
+                        adminOfIds[adminOfIds.length] = $(this).find(".app_id").val();
+                    });
+                    
+                    activeRow = $(".row.selected");
+                    
+                    if ($("#listof-apps .app.selected").length == 0) {
+                        activeRow.find(".no-apps").show();
+                    } else {
+                        activeRow.find(".no-apps").hide();
+                    }
+                    
+                    activeRow.find(".user-admin-list").text(adminsOf.join(", "));
+                    activeRow.find(".app-list").val(adminOfIds.join(","));
+                    
+                    var userAppRow = activeRow.next(".user-apps");
+                    
+                    if (userAppRow.length) {
+                        var userAppIds = userAppRow.find(".app-list").val(),
+                            usersOfIds = (userAppIds)? userAppIds.split(",") : [];
+                    
+                        for (var i = 0; i < adminOfIds.length; i++) {
+                            if (usersOfIds.indexOf(adminOfIds[i]) == -1) {
+                                if (usersOfIds.length == 0 && i == 0) {
+                                    userAppRow.find(".user-admin-list").text(adminsOf[i]);
+                                    userAppRow.find(".app-list").val(adminOfIds[i]);
+                                } else {
+                                    userAppRow.find(".user-admin-list").text(userAppRow.find(".user-admin-list").text().trim() + ", " + adminsOf[i]);
+                                    userAppRow.find(".app-list").val(userAppRow.find(".app-list").val() + "," + adminOfIds[i]);
+                                }
+                                
+                                userAppRow.find(".no-apps").hide();
+                            }
+                        }
+                    }
+                });
+                $(".cancel-user-row").on("click", function() {
+                    $("#listof-apps").hide();
+                    $(".row").removeClass("selected");
+                    $(".create-user-row").slideUp();
+                });
+                $(".create-user").on("click", function() {		
+                    $("#listof-apps").hide();
+                    $(".row").removeClass("selected");
+                    $(".email-check.green-text").remove();
+                    $(".username-check.green-text").remove();
+                    
+                    var data = {},
+                        currUserDetails = $(".user-details:visible");
+                    
+                    data.full_name = currUserDetails.find(".full-name-text").val();
+                    data.username = currUserDetails.find(".username-text").val();
+                    data.email = currUserDetails.find(".email-text").val();
+                    data.global_admin = currUserDetails.find(".global-admin").hasClass("checked");
+                    data.password = currUserDetails.find(".password-text").val();
+                    
+                    $(".required").fadeOut().remove();
+                    var reqSpan = $("<span>").addClass("required").text("*");
+                    
+                    if (!data.password.length) {
+                        currUserDetails.find(".password-text").after(reqSpan.clone());
+                    }
+                    
+                    if (!data.full_name.length) {
+                        currUserDetails.find(".full-name-text").after(reqSpan.clone());
+                    }
+                    
+                    if (!data.username.length) {
+                        currUserDetails.find(".username-text").after(reqSpan.clone());
+                    }
+                    
+                    if (!data.email.length) {
+                        currUserDetails.find(".email-text").after(reqSpan.clone());
+                    } else if (!validateEmail(data.email)) {
+                        $(".email-check").remove();
+                        var invalidSpan = $("<span class='email-check red-text'>").html(jQuery.i18n.map["management-users.email.invalid"]);
+                        currUserDetails.find(".email-text").after(invalidSpan.clone());
+                    }
+                    
+                    if ($(".required").length) {
+                        $(".required").fadeIn();
+                        return false;
+                    } else if ($(".red-text").length) {
+                        return false;
+                    }
+                    
+                    if (!data.global_admin) {
+                        data.admin_of = currUserDetails.find(".admin-apps .app-list").val().split(",");
+                        data.user_of = currUserDetails.find(".user-apps .app-list").val().split(",");
+                    }
+                    $.ajax({
+                        type: "GET",
+                        url: countlyCommon.API_PARTS.users.w + '/create',
+                        data: {
+                            args: JSON.stringify(data),
+                            api_key: countlyGlobal['member'].api_key
+                        },
+                        dataType: "jsonp",
+                        success: function() {
+                            app.activeView.render();
+                        }
+                    });
+                });
+                $('.scrollable').slimScroll({
+                    height: '100%',
+                    start: 'top',
+                    wheelStep: 10,
+                    position: 'right'
+                });
+                $("#select-all").on('click', function() {
+                    $("#listof-apps .app:not(.disabled)").addClass("selected");
+                    adminsOf = [];
+                    var adminOfIds = [];
+                    
+                    $("#listof-apps .app.selected").each(function() {
+                        adminsOf[adminsOf.length] = $(this).find(".name").text();
+                        adminOfIds[adminOfIds.length] = $(this).find(".app_id").val();
+                    });
+        
+                    activeRow = $(".row.selected");
+                    
+                    activeRow.find(".user-admin-list").text(adminsOf.join(", "));
+                    activeRow.find(".app-list").val(adminOfIds.join(","));
+                    activeRow.find(".no-apps").hide();
+		
+                    var userAppRow = activeRow.next(".user-apps");
+                    
+                    if (userAppRow.length) {
+                        userAppRow.find(".user-admin-list").text(adminsOf.join(", "));
+                        userAppRow.find(".app-list").val(adminOfIds.join(","));
+                        userAppRow.find(".no-apps").hide();
+                    }
+                    
+                    $(this).hide();
+                    $("#deselect-all").show();
+                });
+                
+                $("#deselect-all").on('click', function() {
+                    $("#listof-apps").find(".app:not(.disabled)").removeClass("selected");
+                    
+                    adminsOf = [];
+                    var adminOfIds = [];
+                    
+                    $("#listof-apps .app.selected").each(function() {
+                        adminsOf[adminsOf.length] = $(this).find(".name").text();
+                        adminOfIds[adminOfIds.length] = $(this).find(".app_id").val();
+                    });
+                    
+                    activeRow = $(".row.selected");
+                    
+                    activeRow.find(".user-admin-list").text(adminsOf.join(", "));
+                    activeRow.find(".app-list").val(adminOfIds.join(","));
+                    
+                    if ($("#listof-apps .app.selected").length == 0) {
+                        activeRow.find(".no-apps").show();
+                    } else {
+                        activeRow.find(".no-apps").hide();
+                    }
+                    
+                    $(this).hide();
+                    $("#select-all").show();
+                });
+                
+                $("#done").on('click', function() {
+                    $("#listof-apps").hide();
+                    $(".row").removeClass("selected");
+                });	
             }
         });
-    }
+    },
+    initTable: function(){
+        var self = this;
+        function generatePassword() {
+            var text = "";
+            var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            for( var i=0; i < 6; i++ )
+                text += possible.charAt(Math.floor(Math.random() * possible.length));
+            return text;
+        }
+        function validateEmail(email) { 
+            var re = /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/;
+            return re.test(email);
+        }
+        var adminsOf = [],
+		activeRow,
+		userDetailsClone,
+		previousUserDetails,
+		lastUserSaved = false,
+		previousSelectAppPos = {},
+		currUsername = "",
+		currEmail = "";
+        // translate help module
+        $("[data-help-localize]").each(function() {
+            var elem = $(this);
+            if (elem.data("help-localize") != undefined) {
+                elem.data("help", jQuery.i18n.map[elem.data("help-localize")]);
+            }
+        });
+        
+        // translate dashboard
+        $("[data-localize]").each(function() {
+            var elem = $(this);
+            elem.text(jQuery.i18n.map[elem.data("localize")]);				
+        });
+        
+        if ($("#help-toggle").hasClass("active")) {
+            $('.help-zone-vb').tipsy({gravity: $.fn.tipsy.autoNS, trigger: 'manual', title: function(){ return ($(this).data("help"))? $(this).data("help") : ""; }, fade: true, offset: 5, cssClass: 'yellow', opacity: 1, html: true});
+            $('.help-zone-vs').tipsy({gravity: $.fn.tipsy.autoNS, trigger: 'manual', title: function(){ return ($(this).data("help"))? $(this).data("help") : ""; }, fade: true, offset: 5, cssClass: 'yellow narrow', opacity: 1, html: true});
+            
+            $.idleTimer('destroy');
+            clearInterval(self.refreshActiveView);
+            $(".help-zone-vs, .help-zone-vb").hover(
+                function () {
+                    $(this).tipsy("show");
+                }, 
+                function () {
+                    $(this).tipsy("hide");
+                }
+            );
+        }
+        
+        function closeActiveEdit() {
+            CountlyHelpers.closeRows(self.dtable);
+            $("#listof-apps").hide();
+            $(".row").removeClass("selected");
+        }
+        
+        $(".select-apps").off("click").on('click', function() {
+            $("#listof-apps .app").removeClass("selected");
+            activeRow = $(this).parent(".row");
+            activeRow.addClass("selected");
+            var buttonPos = $(this).offset();
+            buttonPos.top += 26;
+            buttonPos.left -= 18;
+            
+            if ($("#listof-apps").is(":visible") && JSON.stringify(buttonPos) === JSON.stringify(previousSelectAppPos)) {
+                $("#listof-apps").hide();
+                $(".row").removeClass("selected");
+                return true;
+            }
+            
+            previousSelectAppPos = buttonPos;
+            
+            var appList = activeRow.find(".app-list").val().split(","),
+                adminAppList = $(".admin-apps:visible .app-list").val().split(","),
+                isAdminApps = activeRow.hasClass("admin-apps");
+            
+            $("#listof-apps").find(".app_id").each(function() {
+                if (appList.indexOf($(this).val()) != -1) {
+                    $(this).parent().addClass("selected");
+                }
+                
+                if (!isAdminApps && adminAppList.indexOf($(this).val()) != -1) {
+                    $(this).parent().addClass("disabled");
+                } else {
+                    $(this).parent().removeClass("disabled");
+                }
+            });
+            
+            if ($("#listof-apps .app:not(.disabled)").length == 0) {
+                $("#select-all").hide();
+                $("#deselect-all").hide();
+            } else if ($("#listof-apps .app.selected").length == $("#listof-apps .app").length) {
+                $("#select-all").hide();
+                $("#deselect-all").show();
+            } else {
+                $("#select-all").show();
+                $("#deselect-all").hide();
+            }
+            
+            $("#listof-apps").show().offset(buttonPos);
+        });
+        
+        $(".save-user").off("click").on("click", function() {
+            $("#listof-apps").hide();
+            $(".row").removeClass("selected");
+            $(".email-check.green-text").remove();
+            $(".username-check.green-text").remove();
+            
+            lastUserSaved = true;
+            
+            var data = {},
+                currUserDetails = $(".user-details:visible"),
+                changedPassword = false;
+            
+            data.user_id = $(this).parent(".button-container").find(".user_id").val();
+            data.full_name = currUserDetails.find(".full-name-text").val();
+            data.username = currUserDetails.find(".username-text").val();
+            data.email = currUserDetails.find(".email-text").val();
+            
+            $(".required").fadeOut().remove();
+            var reqSpan = $("<span>").addClass("required").text("*");
+            
+            if (!data.full_name.length) {
+                currUserDetails.find(".full-name-text").after(reqSpan.clone());
+            }
+            
+            if (!data.username.length) {
+                currUserDetails.find(".username-text").after(reqSpan.clone());
+            }
+            
+            if (!data.email.length) {
+                currUserDetails.find(".email-text").after(reqSpan.clone());
+            }
+            
+            if ($(".required").length) {
+                $(".required").fadeIn();
+                return false;
+            } else if ($(".red-text").length) {
+                return false;
+            }
+            
+            if (currUserDetails.find(".delete-user").length != 0) {
+                data.global_admin = currUserDetails.find(".global-admin").hasClass("checked");
+                
+                if (!data.global_admin) {
+                    data.admin_of = currUserDetails.find(".admin-apps .app-list").val().split(",");
+                    data.user_of = currUserDetails.find(".user-apps .app-list").val().split(",");
+                }
+            }
+            
+            if (currUserDetails.find(".password-row").is(":visible") && currUserDetails.find(".password-text").val().length) {
+                data.password = currUserDetails.find(".password-text").val();
+                changedPassword = true;
+            }
+            
+            if (changedPassword) {
+                CountlyHelpers.confirm(jQuery.i18n.prop('management-users.password-change-confirm', data.full_name), "black", function(result) {
+                    if (result) {
+                        data.send_notification = true;
+                    }
+                    
+                    saveUser();
+                }, [jQuery.i18n.map["common.no"], jQuery.i18n.map["common.yes"]]);
+            } else {
+                saveUser();
+            }
+            
+            function saveUser() {
+                $.ajax({
+                    type: "GET",
+                    url: countlyCommon.API_PARTS.users.w + '/update',
+                    data: {
+                        args: JSON.stringify(data),
+                        api_key: countlyGlobal['member'].api_key
+                    },
+                    dataType: "jsonp",
+                    success: function(result) {
+                        if (currUserDetails.find(".delete-user").length == 0) {
+                            $("#menu-username").text(data.username);
+                        }
+                        app.activeView.render();
+                    }
+                });
+            }
+        });
+        
+        $(".username-text").off("keyup").on("keyup",_.throttle(function() {
+            if (!($(this).val().length) || currUsername == $(this).val()) {
+                $(".username-check").remove();
+                return false;
+            }
+        
+            $(this).next(".required").remove();
+        
+            var existSpan = $("<span class='username-check red-text'>").html(jQuery.i18n.map["management-users.username.exists"]),
+                notExistSpan = $("<span class='username-check green-text'>").html("&#10004;"),
+                data = {};
+            
+            data.username = $(this).val();
+            data._csrf = countlyGlobal['csrf_token'];
+        
+            var self = $(this);
+            $.ajax({
+                type: "POST",
+                url: countlyGlobal["path"]+"/users/check/username",
+                data: data,
+                success: function(result) {
+                    $(".username-check").remove();
+                    if (result) {
+                        self.after(notExistSpan.clone());
+                    } else {
+                        self.after(existSpan.clone());
+                    }
+                }
+            });
+        }, 300));
+        
+        $(".email-text").off("keyup").on("keyup",_.throttle(function() {
+            if (!($(this).val().length) || currEmail == $(this).val()) {
+                $(".email-check").remove();
+                return false;
+            }
+            
+            $(this).next(".required").remove();
+            
+            if (!validateEmail($(this).val())) {
+                $(".email-check").remove();
+                var invalidSpan = $("<span class='email-check red-text'>").html(jQuery.i18n.map["management-users.email.invalid"]);
+                $(this).after(invalidSpan.clone());
+                return false;
+            }
+            
+            var existSpan = $("<span class='email-check red-text'>").html(jQuery.i18n.map["management-users.email.exists"]),
+                notExistSpan = $("<span class='email-check green-text'>").html("&#10004;"),
+                data = {};
+            
+            data.email = $(this).val();
+            data._csrf = countlyGlobal['csrf_token'];
+            
+            var self = $(this);
+            $.ajax({
+                type: "POST",
+                url: countlyGlobal["path"]+"/users/check/email",
+                data: data,
+                success: function(result) {
+                    $(".email-check").remove();
+                    if (result) {
+                        self.after(notExistSpan.clone());
+                    } else {
+                        self.after(existSpan.clone());
+                    }
+                }
+            });
+        }, 300));
+        
+        $(".cancel-user").off("click").on("click", function() {
+            closeActiveEdit();
+        });
+        $(".delete-user").off("click").on("click", function() {
+            var currUserDetails = $(".user-details:visible");
+            var fullName = currUserDetails.find(".full-name-text").val();
+        
+            var self = $(this);
+            CountlyHelpers.confirm(jQuery.i18n.prop('management-users.delete-confirm', fullName), "red", function(result) {
+                
+                if (!result) {
+                    return false;
+                }
+            
+                var data = {
+                    user_ids: [self.parent(".button-container").find(".user_id").val()]
+                };
+                $.ajax({
+                    type: "GET",
+                    url: countlyCommon.API_PARTS.users.w + '/delete',
+                    data: {
+                        args: JSON.stringify(data),
+                        api_key: countlyGlobal['member'].api_key
+                    },
+                    dataType: "jsonp",
+                    success: function(result) {
+                        app.activeView.render();
+                    }
+                });
+            });
+        });
+        $(".global-admin").off("click").on('click', function() {
+            var currUserDetails = $(".user-details:visible");
+            
+            currUserDetails.find(".user-apps").toggle();
+            currUserDetails.find(".admin-apps").toggle();	
+            $(this).toggleClass("checked");
+            $("#listof-apps").hide();
+            $(".row").removeClass("selected");
+        });
+        $(".generate-password").off("click").on('click', function() {
+            $(this).parent().find(".password-text").val(generatePassword());
+        });
+        
+        $(".change-password").off("click").on('click', function() {
+            $(this).parents(".row").next().toggle();
+        });
+    },
+    editUser: function( d, self ) {
+        $(".create-user-row").slideUp();
+        $("#listof-apps").hide();
+        $(".row").removeClass("selected");
+        CountlyHelpers.closeRows(self.dtable);
+		// `d` is the original data object for the row
+		var str = '';
+		if(d){
+			str += '<div class="user-details datatablesubrow">';
+            if(countlyGlobal["member"].global_admin){
+				str += '<div class="row help-zone-vs" data-help-localize="help.manage-users.full-name">';
+                    str += '<div class="title" data-localize="management-users.full-name">'+jQuery.i18n.map["management-users.full-name"]+'</div>';
+                    str += '<div class="detail"><input class="full-name-text" type="text" value="'+d.full_name+'"/></div>';
+                str += '</div>';
+				str += '<div class="row help-zone-vs" data-help-localize="help.manage-users.username">';
+					str += '<div class="title" data-localize="management-users.username">'+jQuery.i18n.map["management-users.username"]+'</div>';
+					str += '<div class="detail">';
+					str += '<input class="username-text" type="text" value="'+d.username+'"/><br/>';
+						str += '<div class="small-link change-password" data-localize="management-users.change-password">'+jQuery.i18n.map["management-users.change-password"]+'</div>';
+					str += '</div>';
+				str += '</div>';
+				str += '<div class="row password-row">';
+					str += '<div class="title" data-localize="management-users.password">'+jQuery.i18n.map["management-users.password"]+'</div>';
+					str += '<div class="detail">';
+						str += '<input class="password-text" type="text" value=""/><br/>';
+						str += '<div class="small-link generate-password" data-localize="management-users.generate-password">'+jQuery.i18n.map["management-users.generate-password"]+'</div>';
+					str += '</div>';
+				str += '</div>';
+				str += '<div class="row help-zone-vs" data-help-localize="help.manage-users.email">';
+					str += '<div class="title" data-localize="management-users.email">'+jQuery.i18n.map["management-users.email"]+'</div>';
+					str += '<div class="detail"><input class="email-text" type="text" value="'+d.email+'"/></div>';
+				str += '</div>';
+            }
+			if(!d.is_current_user){
+                if(countlyGlobal["member"].global_admin){
+					str += '<div class="row help-zone-vs" data-help-localize="help.manage-users.global-admin">';
+						str += '<div class="title" data-localize="management-users.global-admin">'+jQuery.i18n.map["management-users.global-admin"]+'</div>';
+						str += '<div class="detail">';
+							str += '<div class="option">';
+                            if(d.global_admin)
+								str += '<div class="global-admin checkbox checked"></div>';
+                            else
+								str += '<div class="global-admin checkbox"></div>';
+								str += '<div class="text"></div>';
+							str += '</div>';
+						str += '</div>';
+					str += '</div>';
+                }
+                if(d.global_admin)
+					str += '<div class="row admin-apps help-zone-vs" data-help-localize="help.manage-users.admin-of" style="display:none;">';
+                else
+					str += '<div class="row admin-apps help-zone-vs" data-help-localize="help.manage-users.admin-of">';
+						str += '<div class="title" data-localize="management-users.admin-of">'+jQuery.i18n.map["management-users.admin-of"]+'</div>';
+						str += '<div class="select-apps">';
+							str += '<input type="hidden" value="'+d.admin_of+'" class="app-list"/>';
+						str += '</div>';
+						str += '<div class="detail user-admin-list">';
+				if(d.admin_of && d.admin_of.length){
+						str += CountlyHelpers.appIdsToNames(d.admin_of);
+				}else{
+						str += '<span data-localize="management-users.admin-of.tip">'+jQuery.i18n.map["management-users.admin-of.tip"]+'</span>';
+				}
+						str += '</div>';
+						str += '<div class="no-apps" data-localize="management-users.admin-of.tip">'+jQuery.i18n.map["management-users.admin-of.tip"]+'</div>';
+					str += '</div>';
+                    if(d.global_admin)
+                        str += '<div class="row user-apps help-zone-vs" data-help-localize="help.manage-users.user-of" style="display:none;">';
+                    else
+                        str += '<div class="row user-apps help-zone-vs" data-help-localize="help.manage-users.user-of">';
+						str += '<div class="title" data-localize="management-users.user-of">'+jQuery.i18n.map["management-users.user-of"]+'</div>';
+						str += '<div class="select-apps">';
+							str += '<input type="hidden" value="'+d.user_of+'" class="app-list"/>';
+						str += '</div>';
+						str += '<div class="detail user-admin-list">';
+				if(d.user_of && d.user_of.length){
+						str += CountlyHelpers.appIdsToNames(d.user_of);
+				}else{
+						str += '<span data-localize="management-users.user-of.tip">'+jQuery.i18n.map["management-users.user-of.tip"]+'</span>';
+				}
+						str += '</div>';
+						str += '<div class="no-apps" data-localize="management-users.user-of.tip">'+jQuery.i18n.map["management-users.user-of.tip"]+'</div>';
+					str += '</div>';
+			}
+					str += '<div class="button-container">';
+						str += '<input class="user_id" type="hidden" value="'+d._id+'"/>';
+						str += '<a class="icon-button light save-user" data-localize="common.save">'+jQuery.i18n.map["common.save"]+'</a>';
+						str += '<a class="icon-button light cancel-user" data-localize="common.cancel">'+jQuery.i18n.map["common.cancel"]+'</a>';
+				if(!d.is_current_user){
+						str += '<a class="icon-button red delete-user" data-localize="management-users.delete-user">'+jQuery.i18n.map["management-users.delete-user"]+'</a>';
+				}
+					str += '</div>';
+				str += '</div>';
+		}
+        setTimeout(function(){self.initTable();}, 1);
+		return str;
+	}
 });
 
 window.EventsView = countlyView.extend({
@@ -2722,9 +3448,9 @@ window.EventsView = countlyView.extend({
 
                     $(".dialog .events-table tbody tr").each(function () {
                         var currEvent = $(this);
-                        eventKey = currEvent.find(".event-key").text();
+                        eventKey = currEvent.find(".event-key").text().replace("\\", "\\\\").replace("\$", "\\u0024").replace(".", "\\u002e");
 
-                        if (currEvent.find(".event-name").val()) {
+                        if (currEvent.find(".event-name").val() && eventKey != currEvent.find(".event-name").val()) {
                             if (!eventMap[eventKey]) {
                                 eventMap[eventKey] = {}
                             }
@@ -2965,6 +3691,7 @@ var AppRouter = Backbone.Router.extend({
     dateFromSelected:null, //date from selected from the date picker
     activeAppName:'',
     activeAppKey:'',
+    refreshActiveView:0, //refresh interval function reference
     main:function (forced) {
         var change = true,
             redirect = false;
@@ -3045,8 +3772,6 @@ var AppRouter = Backbone.Router.extend({
     durations:function () {
         this.renderWhenReady(this.durationsView);
     },
-    refreshActiveView:function () {
-    }, //refresh interval function
     renderWhenReady:function (viewName) { //all view renders end up here
 
         // If there is an active view call its destroy function to perform cleanups before a new view renders
@@ -3085,6 +3810,61 @@ var AppRouter = Backbone.Router.extend({
         
         if(countlyGlobal && countlyGlobal["message"]){
             CountlyHelpers.parseAndShowMsg(countlyGlobal["message"]);
+        }
+
+        // Init sidebar based on the current url
+        self.sidebar.init();
+    },
+    sidebar: {
+        init: function() {
+            setTimeout(function() {
+                $("#sidebar-menu").find(".item").removeClass("active menu-active");
+
+                var selectedMenu = $($("#sidebar-menu").find("a[href='#" + Backbone.history.fragment + "']"));
+               
+                if(!selectedMenu.length)
+                    selectedMenu = $($("#sidebar-menu").find("a[href='#/" + (Backbone.history.fragment.split("/")[1] || "") + "']"));
+                
+                var selectedSubmenu = selectedMenu.parents(".sidebar-submenu");
+
+                if (selectedSubmenu.length) {
+                    selectedMenu.addClass("active");
+                    selectedSubmenu.prev().addClass("active menu-active");
+                    app.sidebar.submenu.toggle(selectedSubmenu);
+                } else {
+                    selectedMenu.addClass("active");
+                    app.sidebar.submenu.toggle();
+                }
+            }, 1000);
+        },
+        submenu: {
+            toggle: function(el) {
+                $(".sidebar-submenu").removeClass("half-visible");
+
+                if (!el) {
+                    $(".sidebar-submenu:visible").animate({"right":"-170px"}, {duration:300, easing:'easeOutExpo', complete: function() {
+                        $(this).hide();
+                    }});
+                    return true;
+                }
+
+                if (el.is(":visible")) {
+
+                } else if ($(".sidebar-submenu").is(":visible")) {
+                    $(".sidebar-submenu").hide();
+                    el.css({"right":"-110px"}).show().animate({"right":"0"}, {duration:300, easing:'easeOutExpo'});
+                    addText();
+                } else {
+                    el.css({"right":"-170px"}).show().animate({"right":"0"}, {duration:300, easing:'easeOutExpo'});
+                    addText();
+                }
+
+                function addText() {
+                    $(".menu-title").remove();
+                    var menuTitle = $("<div class='menu-title'></div>").text($(el.prev()[0]).text()).prepend("<i class='submenu-close ion-close'></i>");
+                    el.prepend(menuTitle);
+                }
+            }
         }
     },
     initialize:function () { //initialize the dashboard, register helpers etc.
@@ -3212,7 +3992,7 @@ var AppRouter = Backbone.Router.extend({
             }
         });
 
-        $(document).ready(function () {
+        $(document).ready(function ()  {
 
             CountlyHelpers.initializeSelect();
             CountlyHelpers.initializeTextSelect();
@@ -3387,17 +4167,37 @@ var AppRouter = Backbone.Router.extend({
                 });
             });
 
-            $("#sidebar-menu").on("click", ".item", function () {
-                var elNext = $(this).next(),
-                    isElActive = $(this).hasClass("active");
+            // SIDEBAR
+            $("#sidebar-menu").on("click", ".submenu-close", function () {
+                $(this).parents(".sidebar-submenu").animate({"right":"-170px"}, {duration:200, easing:'easeInExpo', complete: function() {
+                    $(".sidebar-submenu").hide();
+                    $("#sidebar-menu>.sidebar-menu>.item").removeClass("menu-active");
+                }});
+            });
 
-                if (elNext.hasClass("sidebar-submenu") && !(isElActive)) {
-                    elNext.slideToggle();
+            $("#sidebar-menu").on("click", ".item", function () {
+                if ($(this).hasClass("menu-active")) {
+                    return true;
+                }
+
+                $("#sidebar-menu>.sidebar-menu>.item").removeClass("menu-active");
+
+                var elNext = $(this).next();
+
+                if (elNext.hasClass("sidebar-submenu")) {
+                    $(this).addClass("menu-active");
+                    self.sidebar.submenu.toggle(elNext);
                 } else {
-                    $("#sidebar-menu>.item").removeClass("active");
+                    $("#sidebar-menu").find(".item").removeClass("active");
                     $(this).addClass("active");
-                    var subMenu = $(this).parent(".sidebar-submenu");
-                    subMenu.prev(".item").addClass("active");
+
+                    var mainMenuItem = $(this).parent(".sidebar-submenu").prev(".item");
+
+                    if (mainMenuItem.length) {
+                        mainMenuItem.addClass("active menu-active");
+                    } else {
+                        self.sidebar.submenu.toggle();
+                    }
 
                     if ($("#app-nav").offset().left == 201) {
                         self.closeAppTooltip();
@@ -3406,16 +4206,57 @@ var AppRouter = Backbone.Router.extend({
                     }
                 }
             });
+
+            $("#sidebar-menu").hoverIntent({
+                over: function() {
+                    var visibleSubmenu = $(".sidebar-submenu:visible");
+
+                    if (!$(this).hasClass("menu-active") && $(".sidebar-submenu").is(":visible") && !visibleSubmenu.hasClass("half-visible")) {
+                        visibleSubmenu.addClass("half-visible");
+                        visibleSubmenu.animate({"right":"-110px"}, {duration:300, easing:'easeOutExpo'});
+                    }
+                },
+                out: function() { },
+                selector: ".sidebar-menu>.item"
+            });
+
+            $("#sidebar-menu").hoverIntent({
+                over: function() {},
+                out: function() {
+                    var visibleSubmenu = $(".sidebar-submenu:visible");
+
+                    if ($(".sidebar-submenu").is(":visible") && visibleSubmenu.hasClass("half-visible")) {
+                        visibleSubmenu.removeClass("half-visible");
+                        visibleSubmenu.animate({"right":"0"}, {duration:300, easing:'easeOutExpo'});
+                    }
+                },
+                selector: ""
+            });
+
+            $("#sidebar-menu").hoverIntent({
+                over: function() {
+                    var visibleSubmenu = $(".sidebar-submenu:visible");
+
+                    if (visibleSubmenu.hasClass("half-visible")) {
+                        visibleSubmenu.removeClass("half-visible");
+                        visibleSubmenu.animate({"right":"0"}, {duration:300, easing:'easeOutExpo'});
+                    }
+                },
+                out: function() {},
+                selector: ".sidebar-submenu:visible"
+            });
+
 			$('#sidebar-menu').slimScroll({
-				height: ($(window).height()-123-96)+'px',
+				height: ($(window).height()-123-96+28)+'px',
 				railVisible: true,
 				railColor : '#4CC04F',
 				railOpacity : .2,
 				color: '#4CC04F'
 			});
+
 			$( window ).resize(function() {
 				$('#sidebar-menu').slimScroll({
-					height: ($(window).height()-123-96)+'px'
+					height: ($(window).height()-123-96+28)+'px'
 				});
 			});
 
@@ -3494,7 +4335,7 @@ var AppRouter = Backbone.Router.extend({
                 
                 $.ajax({
                     type:"POST",
-                    url:countlyGlobal["path"]+"/user/settings",
+                    url:countlyGlobal["path"]+"/user/settings/lang",
                     data:{
                         "username":countlyGlobal["member"].username,
                         "lang":countlyCommon.BROWSER_LANG_SHORT,
@@ -3529,7 +4370,8 @@ var AppRouter = Backbone.Router.extend({
                 var username = $(".dialog #username").val(),
                     old_pwd = $(".dialog #old_pwd").val(),
                     new_pwd = $(".dialog #new_pwd").val(),
-                    re_new_pwd = $(".dialog #re_new_pwd").val();
+                    re_new_pwd = $(".dialog #re_new_pwd").val(),
+                    api_key = $(".dialog #api-key").val();
 
                 if (new_pwd != re_new_pwd) {
                     $(".dialog #settings-save-result").addClass("red").text(jQuery.i18n.map["user-settings.password-match"]);
@@ -3545,6 +4387,7 @@ var AppRouter = Backbone.Router.extend({
                         "username":username,
                         "old_pwd":old_pwd,
                         "new_pwd":new_pwd,
+                        "api_key":api_key,
                         _csrf:countlyGlobal['csrf_token']
                     },
                     success:function (result) {
@@ -3560,6 +4403,9 @@ var AppRouter = Backbone.Router.extend({
                             $(".dialog #new_pwd").val("");
                             $(".dialog #re_new_pwd").val("");
                             $("#menu-username").text(username);
+                            $("#user-api-key").val(api_key);
+                            countlyGlobal["member"].username = username;
+                            countlyGlobal["member"].api_key = api_key;
                         }
 
                         $(".dialog #save-account-details").removeClass("disabled");
@@ -3579,12 +4425,13 @@ var AppRouter = Backbone.Router.extend({
                 CountlyHelpers.alert(jQuery.i18n.map["help.help-mode-welcome"], "black");
             });
             $(".help-toggle, #help-toggle").click(function (e) {
+
                 e.stopPropagation();
-                $("#help-toggle").toggleClass("active");
+                $(".help-toggle #help-toggle").toggleClass("active");
 
-                app.tipsify($("#help-toggle").hasClass("active"));
+                app.tipsify($(".help-toggle #help-toggle").hasClass("active"));
 
-                if ($("#help-toggle").hasClass("active")) {
+                if ($(".help-toggle #help-toggle").hasClass("active")) {
                     help();
                     $.idleTimer('destroy');
                     clearInterval(self.refreshActiveView);
@@ -4179,7 +5026,7 @@ var AppRouter = Backbone.Router.extend({
 
                 $(saveHTML).insertBefore(tableWrapper.find(".DTTT_container"));
                 $(searchHTML).insertBefore(tableWrapper.find(".dataTables_filter"));
-                tableWrapper.find(".dataTables_filter").html(tableWrapper.find(".dataTables_filter").find("input").attr("Placeholder","Search").clone(true));
+                tableWrapper.find(".dataTables_filter").html(tableWrapper.find(".dataTables_filter").find("input").attr("Placeholder",jQuery.i18n.map["common.search"]).clone(true));
 
                 tableWrapper.find(".save-table-data").on("click", function() {
                     if ($(this).next(".DTTT_container").css('visibility') == 'hidden') {
@@ -4206,7 +5053,6 @@ var AppRouter = Backbone.Router.extend({
         });
     },
     localize:function (el) {
-
         var helpers = {
             onlyFirstUpper:function (str) {
                 return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
@@ -4328,6 +5174,11 @@ var AppRouter = Backbone.Router.extend({
         for(var i = 0; i < this.appManagementSwitchCallbacks.length; i++){
             this.appManagementSwitchCallbacks[i](appId, type || countlyGlobal["apps"][appId].type);
         }
+        if($("#app-add-name").length){
+            var newAppName = $("#app-add-name").val();
+            $("#app-container-new .name").text(newAppName);
+            $(".new-app-name").text(newAppName);
+        }
     },
     pageScript:function () { //scripts to be executed on each view change
         $("#month").text(moment().year());
@@ -4336,34 +5187,6 @@ var AppRouter = Backbone.Router.extend({
 
         var self = this;
         $(document).ready(function () {
-  
-			$("#sidebar-menu").find("a").removeClass("active");
-
-            var currentMenu = $("#sidebar-menu").find("a[href='#" + Backbone.history.fragment + "']");
-            if(currentMenu.length == 0){
-                $("#"+countlyGlobal["apps"][countlyCommon.ACTIVE_APP_ID].type+"-type a").each(function(){
-                    if(this.hash != "#/" && this.hash != ""){
-                        if(location.hash == this.hash){
-                            currentMenu = $(this);
-                            return false;
-                        }
-                        else if(location.hash.indexOf(this.hash) == 0){
-                            currentMenu = $(this);
-                            return false;
-                        }
-                    }
-                });
-            }
-            currentMenu.addClass("active");
-
-            var subMenu = currentMenu.parent(".sidebar-submenu");
-            subMenu.prev(".item").addClass("active");
-
-            if (currentMenu.not(":visible")) {
-                subMenu.slideDown();
-            }
-
-            $(".sidebar-submenu").not(subMenu).slideUp();
 
             var selectedDateID = countlyCommon.getPeriod();
 
@@ -4532,6 +5355,12 @@ var AppRouter = Backbone.Router.extend({
             $(".resource-link").on('click', function() {
                 if ($(this).data("link")) {
                     CountlyHelpers.openResource($(this).data("link"));
+                }
+            });
+
+            $("#sidebar-menu").find(".item").each(function(i) {
+                if ($(this).next().hasClass("sidebar-submenu") && $(this).find(".ion-chevron-right").length == 0) {
+                    $(this).append("<span class='ion-chevron-right'></span>");
                 }
             });
         });

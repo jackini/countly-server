@@ -30,14 +30,34 @@ var plugin = {},
     plugins.register("/o/urltest", function(ob){
         var params = ob.params;
         if(params.qstring.url){
-            request(params.qstring.url, function (error, response, body) {
-                if (!error && response.statusCode == 200) {
+            var options = {
+                url: params.qstring.url,
+                headers: {
+                    'User-Agent': 'CountlySiteBot'
+                }
+            };
+            request(options, function (error, response, body) {
+                if (!error && response.statusCode >= 200 && response.statusCode < 400) {
                     common.returnOutput(params,{result:true});
                 }
                 else{
                     common.returnOutput(params,{result:false});
                 }
             });
+        }
+        else{
+            common.returnOutput(params,{result:false});
+        }
+        return true;
+    });
+    
+    plugins.register("/o/urlredir", function(ob){
+        var params = ob.params;
+        if(params.qstring.url){
+            params.res.writeHead(302, {
+                'Location': params.qstring.url,
+            });
+            params.res.end();
         }
         else{
             common.returnOutput(params,{result:false});
@@ -162,7 +182,7 @@ var plugin = {},
         var dbAppUser = ob.dbAppUser;
         if(dbAppUser && dbAppUser.vc){
             common.db.collection('app_users' + params.app_id).findAndModify({'_id': params.app_user_id },{}, {$set:{vc:0}},{upsert:true, new:false}, function (err, user){
-                user = user.value;
+                user = user && user.ok ? user.value : null;
                 if(user && user.vc){
                     var ranges = [
                         [0,2],
@@ -213,12 +233,24 @@ var plugin = {},
     plugins.register("/i", function(ob){
         var params = ob.params;
         if (params.qstring.events) {
-            var currEvent;
-            for (var i=0; i < params.qstring.events.length; i++) {
-                currEvent = params.qstring.events[i];
-                if (currEvent.key == "[CLY]_view" && currEvent.segmentation && currEvent.segmentation.name)
-                    processView(params, currEvent);
-            }
+            params.qstring.events = params.qstring.events.filter(function(currEvent){
+                if (currEvent.key == "[CLY]_view"){
+                    if(currEvent.segmentation && currEvent.segmentation.name){
+                        processView(params, currEvent);
+                        if(currEvent.segmentation.visit){
+                            return true;
+                        }
+                        else{
+                            if(currEvent.dur || currEvent.segmentation.dur){
+                                plugins.dispatch("/view/duration", {params:params, duration:currEvent.dur || currEvent.segmentation.dur});
+                            }
+                            return false;
+                        }
+                    }
+                    return false;
+                }
+                return true;
+            });
         }
     });
     
@@ -237,11 +269,11 @@ var plugin = {},
                 var lastView = {};
                 lastView[escapedMetricVal] = params.time.timestamp;           
                 common.db.collection('app_views' + params.app_id).findAndModify({'_id': params.app_user_id },{}, {$max:lastView},{upsert:true, new:false}, function (err, view){
-                    recordMetrics(params, currEvent, user, view);
+                    recordMetrics(params, currEvent, user && user.ok ? user.value : null, view && view.ok ? view.value : null);
                 });
             }
             else{
-                recordMetrics(params, currEvent, user);
+                recordMetrics(params, currEvent, user && user.ok ? user.value : null);
             }
         });
 	}
