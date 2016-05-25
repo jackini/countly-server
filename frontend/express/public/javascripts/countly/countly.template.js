@@ -1046,9 +1046,9 @@ window.AllAppsView = countlyView.extend({
                 data = sessions[i][this.selectedView];
                 color = countlyCommon.GRAPH_COLORS[cnt];
                 if(i == "all")
-                    sessionDP.push({data:data.data, label:data.label + " for All Apps", color:color});
+                    sessionDP.push({data:data.data, label:jQuery.i18n.map["allapps.title"], color:color});
                 else
-                    sessionDP.push({data:data.data, label:data.label + " for "+countlyGlobal["apps"][i].name, color:color});
+                    sessionDP.push({data:data.data, label:countlyGlobal["apps"][i].name, color:color});
                 $("#"+i+" .color").css("background-color", color);
                 cnt++;
             }
@@ -1173,8 +1173,8 @@ window.AllAppsView = countlyView.extend({
             });
         }
     },
-    refresh:function () {
-        /*var self = this;
+    dateChanged:function () {
+        var self = this;
         $.when(countlyAllApps.initialize()).then(function () {
             if (app.activeView != self) {
                 return false;
@@ -1186,7 +1186,7 @@ window.AllAppsView = countlyView.extend({
             CountlyHelpers.refreshTable(self.dtable, appData);
             self.drawGraph();
             app.localize();
-        });*/
+        });
     }
 });
 

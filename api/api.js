@@ -14,7 +14,9 @@ plugins.setConfigs("api", {
     city_data: true,
     event_limit: 500,
     event_segmentation_limit: 100,
-    event_segmentation_value_limit:1000
+    event_segmentation_value_limit:1000,
+    sync_plugins: false,
+    session_cooldown: 15
 });
 
 plugins.setConfigs("apps", {
@@ -57,6 +59,15 @@ if (cluster.isMaster) {
                 });
                 if (worker !== jobsWorker) { jobsWorker.send({cmd: 'log', config: msg.config}); }
                 require('./utils/log.js').ipcHandler(msg);
+            }
+            else if(msg.cmd === "checkPlugins"){
+                plugins.checkPluginsMaster();
+            }
+            else if(msg.cmd === "startPlugins"){
+                plugins.startSyncing();
+            }
+            else if(msg.cmd === "endPlugins"){
+                plugins.stopSyncing();
             }
         });
     };
@@ -718,6 +729,9 @@ if (cluster.isMaster) {
                                     break;
                                 case 'get_events':
                                     validateUserForDataReadAPI(params, countlyApi.data.fetch.fetchCollection, 'events');
+                                    break;
+                                case 'all_apps':
+                                    validateUserForDataReadAPI(params, countlyApi.data.fetch.fetchAllApps);
                                     break;
                                 default:
                                     if(!plugins.dispatch(apiPath, {params:params, validateUserForDataReadAPI:validateUserForDataReadAPI, validateUserForMgmtReadAPI:validateUserForMgmtReadAPI, validateUserForDataWriteAPI:validateUserForDataWriteAPI, validateUserForGlobalAdmin:validateUserForGlobalAdmin}))
